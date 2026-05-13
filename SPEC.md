@@ -1,4 +1,4 @@
-# amaca — Spec (draft v0.1)
+# amaca — Spec (v0.2, decisions locked)
 
 A web-based front end that lets a user run scientific computing codes
 through a browser. The codes do the work; amaca handles the user
@@ -62,6 +62,57 @@ renderers are an escape hatch, not the norm.
 
 ---
 
+## 2a. Auth model
+
+amaca uses **GitHub OAuth** for first-party identity, plus **personal API
+tokens** for programmatic access (CLI, scripts, third-party tools).
+
+```python
+class User:
+    id: int
+    github_id: int            # immutable GitHub user id
+    github_username: str      # current handle (can change on GitHub)
+    email: str | None
+    role: Literal["admin", "user"] = "user"
+    disabled: bool = False
+    created_at: datetime
+    last_login_at: datetime | None
+
+class ApiToken:
+    id: int
+    user_id: int              # owner
+    name: str                 # user-supplied label ("laptop CLI")
+    prefix: str               # first 8 chars, indexed (for lookup display)
+    hash: str                 # bcrypt of the full token; full token shown once
+    last_used_at: datetime | None
+    created_at: datetime
+    revoked_at: datetime | None
+```
+
+- **Access control:** all `/api/jobs*` endpoints require auth.
+  Non-admins only see jobs where `owner_id == self.id`. Admins see all
+  jobs and have `/api/users` available.
+- **Registration:** `AMACA_ALLOWED_GITHUB_USERS` env var holds a
+  comma-separated allowlist of GitHub usernames. First successful OAuth
+  login from a listed user creates their `User` row. Anyone not on the
+  list gets a clean "not authorised" page.
+- **Bootstrap admin:** `AMACA_ADMIN_GITHUB_USERS` env var marks the
+  initial admin(s); their `User.role` is promoted on first login.
+- **Sessions:** signed cookies (HttpOnly, SameSite=Lax), 30-day expiry,
+  rotated on each request. Backed by `itsdangerous` (or
+  `starlette.middleware.sessions`).
+- **Tokens:** generated as `amk_<32 url-safe bytes>`. Stored only as
+  bcrypt hash; full token returned exactly once at creation. Token
+  carries the user's role at creation time (refreshes on each request).
+
+OAuth env vars: `AMACA_GITHUB_CLIENT_ID`, `AMACA_GITHUB_CLIENT_SECRET`,
+`AMACA_SESSION_SECRET` (random 32+ bytes). Callback URL registered with
+GitHub:
+`http://localhost:8000/api/auth/callback` for dev,
+`https://<host>/api/auth/callback` for deployed.
+
+---
+
 ## 3. Architecture
 
 ```
@@ -84,9 +135,20 @@ with timestamps and a streaming log channel.
 ## 4. API surface (v1)
 
 ```
+# Auth
+GET    /api/auth/login                  redirect to GitHub OAuth
+GET    /api/auth/callback               OAuth callback → set session cookie
+POST   /api/auth/logout                 clear session
+GET    /api/auth/me                     who am I (current user + role)
+POST   /api/auth/tokens                 create a personal API token
+GET    /api/auth/tokens                 list my tokens
+DELETE /api/auth/tokens/{id}            revoke a token
+
+# Codes
 GET    /api/codes                       list registered codes + metadata
 GET    /api/codes/{name}                code detail (full schemas + version)
 
+# Jobs (all require auth; non-admins see only their own)
 POST   /api/jobs                        submit (body = {code, inputs})
 GET    /api/jobs                        list (paginated, filterable)
 GET    /api/jobs/{id}                   status + (when finished) outputs
@@ -94,10 +156,17 @@ DELETE /api/jobs/{id}                   cancel a running job
 GET    /api/jobs/{id}/logs              tail of stdout/stderr
 GET    /api/jobs/{id}/files/{name}      download a file artifact
 WS     /api/jobs/{id}/stream            push updates (status, log lines)
+
+# Admin (role = admin)
+GET    /api/users                       list all users
+PATCH  /api/users/{id}                  set role / disable
 ```
 
 All payloads JSON; files via standard multipart/streaming. OpenAPI doc
 auto-generated and served at `/api/docs`.
+
+Auth accepted via either the session cookie (set by OAuth callback) or
+an `Authorization: Bearer <token>` header (API tokens, for CLI/scripts).
 
 ---
 
@@ -111,7 +180,7 @@ auto-generated and served at `/api/docs`.
 | DB | **SQLite** via SQLAlchemy | trivial setup; switchable to Postgres later |
 | Frontend | **SvelteKit + Vite** | "slick" with less ceremony than React; smaller bundles |
 | Plot rendering | **Plotly** (browser-side) | interactive zoom/hover for free |
-| Auth (v1) | **None** (single-user, localhost-only) | unblock work; add token auth in v2 |
+| Auth (v1) | **GitHub OAuth + API tokens** (multi-user, allowlist-gated) | low friction for a developer tool; same identity people already have; tokens cover CLI use |
 | Tests | **pytest** + **playwright** (UI smoke) | one test stack for both layers |
 
 This stack runs cleanly on the same Homebrew Python 3.14 venv style we
@@ -163,21 +232,18 @@ CCFLY's existence.
 
 ---
 
-## 8. Decisions you need to make (or defer with my default)
+## 8. Decisions (locked for v0.2)
 
-| # | Decision | My default | When it matters |
+| # | Decision | Setting | Notes |
 |---|---|---|---|
-| 1 | **Job duration spread** for codes you plan to add | seconds to ~30 min; sync HTTP is dead, polling/websocket required | architecture (already assumed async); affects worker timeouts |
-| 2 | **Where jobs run** — same host as amaca? | yes, same host for v1; remote-execution adapter is a v2 concern | adapter signature stays the same; ctx grows a `submit_to_cluster` later |
-| 3 | **Single-user vs multi-user** | single-user, localhost, no auth in v1 | dictates whether jobs need an "owner_id" field now |
-| 4 | **File handling cap** | 100 MB per file, files older than 30 d auto-deleted | persistent storage size; nice-to-have, can be added later |
-| 5 | **Frontend framework** | SvelteKit (recommended) | switching cost increases as we write components |
-| 6 | **Backend language constraint** | Python (matches your other work) | rules out e.g. a Rust core; can host adapters that *call* other-language binaries |
-| 7 | **Live result streaming** | log stream yes; intermediate-result streaming no in v1 | UI complexity |
-| 8 | **Persistence of past runs** | yes, keep last N=1000 per code | DB schema |
-
-If any of those defaults are wrong, tell me which row and what you want
-instead, and I'll revise the spec before we write code.
+| 1 | Job duration spread | seconds to ~30 min | async architecture; WS for status, polling fallback |
+| 2 | Where jobs run | same host as amaca for v1 | adapter signature unchanged when remote execution is added later |
+| 3 | Single-user vs multi-user | **multi-user**, GitHub OAuth + API tokens | see §2a |
+| 4 | File handling cap | 100 MB / file, 30-day auto-cleanup | adjustable via env later |
+| 5 | Frontend framework | **SvelteKit** | confirmed |
+| 6 | Backend language | Python | adapters may shell out to anything |
+| 7 | Live result streaming | log stream yes; intermediate results no in v1 | revisit if a real code wants partial outputs |
+| 8 | Persistence of past runs | yes, keep last 1000 per code | DB cleanup task at v2 if needed |
 
 ---
 
