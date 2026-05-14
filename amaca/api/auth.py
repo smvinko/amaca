@@ -1,10 +1,12 @@
 """Auth routes: GitHub OAuth flow + session + API tokens."""
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field
 
 from amaca.auth import (
     authorize_url,
@@ -21,6 +23,40 @@ from .deps import DB, CurrentUser
 from .schemas import TokenCreate, TokenCreated, TokenOut, UserOut
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+def _dev_login_enabled() -> bool:
+    return bool(os.environ.get("AMACA_DEV_LOGIN"))
+
+
+class DevLoginIn(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+
+
+@router.post("/dev-login", response_model=UserOut)
+async def dev_login(payload: DevLoginIn, request: Request, db: DB) -> models.User:
+    """**Dev only.** Sign in as any username without going through GitHub.
+
+    Gated on the ``AMACA_DEV_LOGIN`` env var; returns 404 in production.
+    """
+    if not _dev_login_enabled():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+    user = upsert_user_from_github(
+        db,
+        github_id=-abs(hash(payload.username)) & 0x7FFFFFFF,
+        github_username=payload.username,
+        email=f"{payload.username}@dev.amaca.local",
+    )
+    request.session["user_id"] = user.id
+    return user
+
+
+@router.options("/dev-login")
+async def dev_login_probe() -> Response:
+    """Tiny probe the SPA hits to know whether to surface the dev-login form."""
+    if not _dev_login_enabled():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/login")
