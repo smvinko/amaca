@@ -28,3 +28,40 @@ pip install -e ".[api,workers,dev]"
 pytest                       # unit + contract + api
 pytest -m contract           # adapter contract tests only
 ```
+
+## Writing a code adapter
+
+amaca core ships with a single built-in adapter (`Demo`) used as a test
+fixture. Every real code lives in its own package and plugs in via the
+`amaca.codes` entry-point group — see [SPEC.md §2 "Plugin packages"](SPEC.md)
+for the full contract. Skeleton:
+
+```toml
+# pyproject.toml
+[project]
+name = "amaca-yourcode"
+dependencies = ["amaca", "yourcode @ git+https://github.com/you/yourcode.git@v1.2.3"]
+
+[project.entry-points."amaca.codes"]
+yourcode = "amaca_yourcode.adapter:YourCode"
+```
+
+```python
+# amaca_yourcode/adapter.py
+from amaca.core import Code, JobContext, register
+from pydantic import BaseModel
+
+class Inputs(BaseModel):  ...
+class Outputs(BaseModel): ...
+
+@register
+class YourCode(Code):
+    name = "yourcode"; title = "Your code"; version = "1.0.0"
+    InputSchema = Inputs; OutputSchema = Outputs
+    def run(self, inputs: Inputs, ctx: JobContext) -> Outputs: ...
+```
+
+`pip install -e amaca-yourcode/` and the adapter shows up in the amaca
+UI on next start. The 5 generic contract tests in
+`tests/test_adapter_contract.py` apply to every adapter — copy them
+into your package to enforce them locally.

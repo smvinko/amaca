@@ -60,6 +60,33 @@ Default renderers cover scalars, tables (pandas), plots
 (matplotlib/plotly figure JSON), and downloadable files. Custom
 renderers are an escape hatch, not the norm.
 
+### Plugin packages
+
+Real adapters live in **separate packages** that depend on `amaca` and
+on the underlying code, and register themselves via Python's standard
+entry-point mechanism. The bundled `Demo` adapter exists only as the
+canonical test fixture; amaca core never imports any specific
+scientific code.
+
+```toml
+# pyproject.toml of e.g. amaca-ccfly
+[project]
+name = "amaca-ccfly"
+dependencies = [
+    "amaca",
+    "ccfly @ git+https://github.com/smvinko/ccfly-v2.git@v2.0.0",
+]
+
+[project.entry-points."amaca.codes"]
+ccfly = "amaca_ccfly.adapter:CcflyCode"
+```
+
+amaca picks plugins up at process startup via
+`amaca.core.load_entry_points()`. To pin the underlying code to a
+specific release (and isolate the webserver from ongoing upstream
+development), the adapter package pins the code by tag or commit
+in its own `dependencies` — independent of any amaca version.
+
 ---
 
 ## 2a. Auth model

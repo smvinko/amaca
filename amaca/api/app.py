@@ -13,10 +13,13 @@ from pathlib import Path
 from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
 
+from amaca.core import load_entry_points
 from amaca.db import Base, make_engine, make_sessionmaker
 from amaca.workers import JobRunner
 
-# Register bundled adapters (side-effectful import).
+# Register the bundled Demo adapter (side-effectful import). Real adapters
+# live in their own packages and arrive via the `amaca.codes` entry-point
+# group — see `load_entry_points()` called from the lifespan below.
 import amaca.codes.demo  # noqa: F401
 
 from . import auth, codes, jobs, users
@@ -42,6 +45,11 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        # Discover and register every code installed as an `amaca.codes`
+        # entry-point plugin (e.g. `pip install amaca-ccfly` will surface
+        # here automatically). Built-in adapters are already registered
+        # via the import side effect above.
+        load_entry_points()
         app.state.engine = engine
         app.state.SessionLocal = SessionLocal
         app.state.runner = runner
