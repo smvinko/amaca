@@ -74,6 +74,7 @@ export interface JsonSchemaProperty {
   maxLength?: number;
   enum?: unknown[];
   anyOf?: { type?: string; const?: unknown }[];
+  oneOf?: { const?: unknown; title?: string }[];
   [k: string]: unknown;
 }
 
