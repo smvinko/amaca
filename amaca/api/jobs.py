@@ -59,7 +59,14 @@ async def submit_job(
     try:
         inputs_validated = code_cls.InputSchema.model_validate(payload.inputs)
     except ValidationError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, exc.errors())
+        # include_context=False drops the raw Python Exception objects
+        # Pydantic stores in `ctx` for ValueError-raising validators —
+        # those aren't JSON-serializable. include_url=False just trims
+        # noise; the loc + msg + type are what the UI/CLI cares about.
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            exc.errors(include_context=False, include_url=False),
+        )
 
     job = models.Job(
         owner_id=user.id,
