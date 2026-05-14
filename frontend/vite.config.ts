@@ -9,7 +9,7 @@ export default defineConfig({
       // Proxy API + WebSocket calls to the FastAPI backend.
       // Cookies set by the backend end up on the same origin (5173)
       // because the browser sees a single hop.
-      '/api': { target: 'http://localhost:8000', changeOrigin: true, ws: true }
+      '/api': { target: 'http://127.0.0.1:8000', changeOrigin: true, ws: true }
     }
   }
 });

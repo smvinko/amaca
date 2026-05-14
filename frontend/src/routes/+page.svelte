@@ -1,18 +1,56 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { user } from '$lib/auth';
   import { goto } from '$app/navigation';
+  import { user } from '$lib/auth';
+  import { api, type CodeOut } from '$lib/api';
 
-  let timer: ReturnType<typeof setTimeout> | null = null;
+  let codes: CodeOut[] | null = null;
+  let error = '';
 
-  // Once we know the auth state, route accordingly. Codes-list page
-  // arrives in the next commit; for now signed-in users see a placeholder.
+  onMount(load);
+
+  async function load() {
+    if ($user === null) { goto('/login'); return; }
+    if ($user === undefined) return;     // layout is still loading the user
+    try {
+      codes = await api.listCodes();
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  // Re-load once the auth store resolves.
+  $: if ($user) load();
   $: if ($user === null) goto('/login');
 </script>
 
-{#if $user === undefined}
-  <p class="muted">Loading…</p>
-{:else if $user}
-  <h2>Welcome, {$user.github_username}</h2>
-  <p class="muted">The codes list and job submission pages arrive next. For now the API is reachable at <a href="/api/docs">/api/docs</a>.</p>
+<h2>Codes</h2>
+
+{#if error}
+  <p class="danger">{error}</p>
 {/if}
+
+{#if codes === null}
+  <p class="muted">Loading…</p>
+{:else if codes.length === 0}
+  <p class="muted">No codes registered.</p>
+{:else}
+  {#each codes as code}
+    <a class="card code-card" href="/codes/{encodeURIComponent(code.name)}">
+      <div class="row" style="justify-content: space-between; align-items: baseline">
+        <strong>{code.title}</strong>
+        <span class="muted">{code.name} · v{code.version}</span>
+      </div>
+      {#if code.input_schema.description}
+        <p class="muted" style="margin: 0.5rem 0 0">{code.input_schema.description}</p>
+      {/if}
+    </a>
+  {/each}
+{/if}
+
+<p style="margin-top: 1.5rem"><a href="/jobs">My jobs →</a></p>
+
+<style>
+  .code-card { display: block; text-decoration: none; color: inherit; }
+  .code-card:hover { border-color: var(--accent); }
+</style>

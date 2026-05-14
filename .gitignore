@@ -32,8 +32,8 @@ frontend/build/
 *.db
 *.sqlite
 *.sqlite3
-data/
-jobs/
+/data/
+/jobs/
 
 # Editor / OS
 .DS_Store
