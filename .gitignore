@@ -30,9 +30,12 @@ frontend/build/
 
 # Local databases / artifacts
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 /data/
+/data-dev/
 /jobs/
 
 # Editor / OS
