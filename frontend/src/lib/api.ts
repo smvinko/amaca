@@ -58,6 +58,10 @@ export interface JsonSchema {
   description?: string;
   properties?: Record<string, JsonSchemaProperty>;
   required?: string[];
+  // amaca custom: UI form grouping. If present, the form renders each
+  // group as a labelled section; any field absent from every group
+  // falls into an "Other" section at the end.
+  'x-input-groups'?: { title: string; fields: string[] }[];
   [k: string]: unknown;
 }
 

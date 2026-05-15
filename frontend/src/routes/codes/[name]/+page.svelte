@@ -68,6 +68,28 @@
     try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
   }
 
+  // Resolve the form's groups: take the schema's x-input-groups list,
+  // keep only the fields that actually exist, then put any leftover
+  // properties in an "Other" group at the end.
+  $: groups = (() => {
+    if (!code) return [];
+    const props = code.input_schema.properties ?? {};
+    const declared = code.input_schema['x-input-groups'] ?? [];
+    const seen = new Set<string>();
+    const out: { title: string | null; fields: string[] }[] = [];
+    for (const g of declared) {
+      const fields = g.fields.filter((f) => f in props);
+      if (fields.length === 0) continue;
+      fields.forEach((f) => seen.add(f));
+      out.push({ title: g.title, fields });
+    }
+    const leftover = Object.keys(props).filter((f) => !seen.has(f));
+    if (leftover.length > 0) {
+      out.push({ title: declared.length === 0 ? null : 'Other', fields: leftover });
+    }
+    return out;
+  })();
+
   async function submit() {
     if (!code) return;
     busy = true; submitError = '';
@@ -98,20 +120,32 @@
   <h2>{code.title}</h2>
   <p class="muted">{code.name} · v{code.version}</p>
 
-  <div class="card">
-    {#each Object.entries(code.input_schema.properties ?? {}) as [fieldName, fieldSchema]}
-      <FormField
-        name={fieldName}
-        schema={fieldSchema}
-        bind:value={values[fieldName]}
-      />
+  <div class="form">
+    {#each groups as group}
+      <section class="group">
+        {#if group.title}
+          <h3 class="group-title">{group.title}</h3>
+        {/if}
+        <div class="group-fields">
+          {#each group.fields as fieldName}
+            {@const fieldSchema = code.input_schema.properties?.[fieldName]}
+            {#if fieldSchema}
+              <FormField
+                name={fieldName}
+                schema={fieldSchema}
+                bind:value={values[fieldName]}
+              />
+            {/if}
+          {/each}
+        </div>
+      </section>
     {/each}
 
     {#if submitError}
       <pre class="danger" style="margin: 0.5rem 0; white-space: pre-wrap">{submitError}</pre>
     {/if}
 
-    <div class="row" style="margin-top: 0.5rem; justify-content: space-between">
+    <div class="row" style="margin-top: 1rem; justify-content: space-between">
       <div class="row">
         <button class="primary" on:click={submit} disabled={busy}>
           {busy ? 'Submitting…' : 'Submit'}
@@ -124,3 +158,32 @@
     </div>
   </div>
 {/if}
+
+<style>
+  .form { display: flex; flex-direction: column; gap: 1rem; }
+  .group {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.85rem 1.1rem 0.4rem;
+  }
+  .group-title {
+    margin: 0 0 0.65rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+  }
+  .group-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+  }
+  /* Fields share the row evenly with a soft min-width so things wrap
+     onto another line at narrow widths instead of squashing. */
+  .group-fields > :global(.field) {
+    flex: 1 1 14rem;
+    margin-bottom: 0.6rem;
+  }
+</style>
