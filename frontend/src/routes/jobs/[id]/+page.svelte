@@ -97,7 +97,7 @@
 
   <h3>Outputs</h3>
   <div class="card">
-    <OutputView outputs={job.outputs} />
+    <OutputView outputs={job.outputs} jobId={job.id} />
   </div>
 
   <h3>Inputs</h3>

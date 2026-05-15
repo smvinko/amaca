@@ -1,6 +1,9 @@
 """Job routes: submit, list, get, cancel, logs, WebSocket stream."""
 from __future__ import annotations
 
+from pathlib import Path
+import mimetypes
+
 from fastapi import (
     APIRouter,
     HTTPException,
@@ -9,6 +12,7 @@ from fastapi import (
     WebSocketDisconnect,
     status,
 )
+from fastapi.responses import FileResponse
 from pydantic import ValidationError
 from sqlalchemy import select
 
@@ -114,6 +118,30 @@ async def cancel_job(
             status.HTTP_409_CONFLICT, f"job already {job.status}",
         )
     runner.request_cancel(job.id)
+
+
+@router.get("/{job_id}/files/{file_path:path}")
+async def get_job_file(
+    job_id: int, file_path: str, user: CurrentUser, db: DB, runner: Runner,
+) -> FileResponse:
+    """Serve a file from the job's work directory.
+
+    Path is interpreted relative to the runner's per-job work dir.
+    Absolute paths or any ``..`` traversal that resolves outside the
+    work dir returns 404 (matching the missing-file response, to avoid
+    information leakage).
+    """
+    job = _ensure_visible(db.get(models.Job, job_id), user)
+    base = runner.job_dir(job.id)
+    target = (base / file_path).resolve()
+    try:
+        target.relative_to(base)
+    except ValueError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "file not found")
+    if not target.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "file not found")
+    media_type, _ = mimetypes.guess_type(target.name)
+    return FileResponse(target, media_type=media_type or "application/octet-stream")
 
 
 @router.get("/{job_id}/logs", response_model=list[JobLogLine])

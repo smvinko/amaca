@@ -87,6 +87,15 @@ class JobRunner:
         if live:
             await asyncio.gather(*live, return_exceptions=True)
 
+    def job_dir(self, job_id: int) -> Path:
+        """Absolute path of the work directory for ``job_id``.
+
+        Not guaranteed to exist (only the runner creates it, lazily on
+        ``submit``). API routes that serve files from this directory
+        should still check ``.is_file()`` on the resolved target.
+        """
+        return (self._data_dir / f"job-{job_id}").resolve()
+
     # ------------------------------------------------------------------ internals
 
     @contextmanager
