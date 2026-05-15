@@ -205,9 +205,6 @@
       {#if unitLabel}
         <span class="unit-label">{unitLabel}</span>
       {/if}
-      {#if displayMin !== '' || displayMax !== ''}
-        <span class="range-hint">range: {displayMin || '−∞'}…{displayMax || '+∞'}</span>
-      {/if}
     </div>
   {:else}
     <input
@@ -279,11 +276,6 @@
   .unit-label {
     color: var(--fg-muted);
     font-weight: 500;
-    font-family: var(--font-mono);
-  }
-  .range-hint {
-    color: var(--fg-muted);
-    font-size: 0.8em;
     font-family: var(--font-mono);
   }
 </style>
