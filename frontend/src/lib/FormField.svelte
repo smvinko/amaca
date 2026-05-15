@@ -60,23 +60,89 @@
   $: factor = displayUnit?.factor ?? 1;
   $: unitLabel = displayUnit?.label ?? '';
 
-  $: displayValue =
-    typeof value === 'number' ? value / factor : ('' as const);
-  $: displayMin = typeof rawMin === 'number' ? rawMin / factor : undefined;
-  $: displayMax = typeof rawMax === 'number' ? rawMax / factor : undefined;
-  $: stepVal = typeStr === 'integer' ? 1 : 'any';
+  // Format a numeric display value. Floating-point noise (e.g. 1.21e-13 ÷
+  // 1e-15 = 121.00000000000001) is dropped by rounding through 12 sig
+  // figs. Plain string for "normal" magnitudes; clean exponential (no
+  // "+") for very large or very small numbers.
+  function fmtNumber(n: number | undefined | null): string {
+    if (typeof n !== 'number' || !isFinite(n)) return '';
+    if (n === 0) return '0';
+    const clean = Number(n.toPrecision(12));   // strip FP noise
+    const abs = Math.abs(clean);
+    if (abs >= 1e6 || abs < 1e-3) {
+      return clean.toExponential().replace('e+', 'e');
+    }
+    return String(clean);
+  }
+
+  // Local text state for the numeric field. We use <input type=text>
+  // (not type=number) because:
+  //   - the browser's "number" input rejects intermediate sci-notation
+  //     ("1e" is invalid until you finish typing the exponent)
+  //   - max="1e22" attributes interact weirdly with very-large values
+  // We parse on every keystroke; invalid mid-states just leave the
+  // bound `value` unchanged until the text parses to a finite number.
+  let numText = '';
+  let numInitialised = false;
+
+  $: {
+    // Sync FROM the bound value when it changes for a reason OTHER than
+    // our own keystroke (e.g. initial mount, policy clamp on resubmit).
+    const parsed = numText.trim() === '' ? undefined : Number(numText);
+    const native =
+      typeof parsed === 'number' && isFinite(parsed)
+        ? (typeStr === 'integer' ? Math.trunc(parsed) : parsed) * factor
+        : undefined;
+    if (!numInitialised || (typeof value === 'number' && value !== native)) {
+      numText = typeof value === 'number' ? fmtNumber(value / factor) : '';
+      numInitialised = true;
+    }
+  }
+
+  $: displayMin = typeof rawMin === 'number' ? fmtNumber(rawMin / factor) : '';
+  $: displayMax = typeof rawMax === 'number' ? fmtNumber(rawMax / factor) : '';
 
   function onNumberInput(ev: Event) {
-    const target = ev.target as HTMLInputElement;
-    const raw = target.value;
+    numText = (ev.target as HTMLInputElement).value;
+    const raw = numText.trim();
     if (raw === '') { value = undefined; return; }
-    const n = typeStr === 'integer' ? Math.trunc(Number(raw)) : Number(raw);
+    const n = Number(raw);
+    if (!isFinite(n)) return;        // mid-typing; wait for valid input
+    if (typeStr === 'integer' && !Number.isInteger(n)) {
+      // Decimal value entered into an integer field — reject and let the
+      // .invalid class surface the issue.
+      return;
+    }
     value = n * factor;
   }
 
   function onTextInput(ev: Event) {
     value = (ev.target as HTMLInputElement).value;
   }
+
+  // Block "." / "," keystrokes on integer fields so users can't even
+  // type a decimal in the first place.
+  function blockDecimalKey(ev: KeyboardEvent) {
+    if (typeStr === 'integer' && (ev.key === '.' || ev.key === ',')) {
+      ev.preventDefault();
+    }
+  }
+  function blockDecimalPaste(ev: ClipboardEvent) {
+    if (typeStr !== 'integer') return;
+    const text = ev.clipboardData?.getData('text') ?? '';
+    if (text.includes('.') || text.includes(',')) ev.preventDefault();
+  }
+
+  // Validity flag drives the .invalid class — covers paste-then-edit
+  // and the brief mid-typing window before onNumberInput's coercion.
+  $: numTextValid = (() => {
+    const raw = numText.trim();
+    if (raw === '') return true;
+    const n = Number(raw);
+    if (!isFinite(n)) return false;
+    if (typeStr === 'integer' && !Number.isInteger(n)) return false;
+    return true;
+  })();
 
   function onBool(ev: Event) {
     value = (ev.target as HTMLInputElement).checked;
@@ -118,15 +184,21 @@
   {:else if typeStr === 'integer' || typeStr === 'number'}
     <div class="num-row">
       <input
-        type="number"
-        value={displayValue}
-        min={displayMin}
-        max={displayMax}
-        step={stepVal}
+        type="text"
+        inputmode={typeStr === 'integer' ? 'numeric' : 'decimal'}
+        autocomplete="off"
+        spellcheck={false}
+        class:invalid={!numTextValid}
+        value={numText}
         on:input={onNumberInput}
+        on:keydown={blockDecimalKey}
+        on:paste={blockDecimalPaste}
       />
       {#if unitLabel}
         <span class="unit-label">{unitLabel}</span>
+      {/if}
+      {#if displayMin !== '' || displayMax !== ''}
+        <span class="range-hint">range: {displayMin || '−∞'}…{displayMax || '+∞'}</span>
       {/if}
     </div>
   {:else}
@@ -191,10 +263,19 @@
     align-items: center;
     gap: 0.5rem;
   }
-  .num-row input { width: 10rem; }
+  .num-row input { width: 10rem; font-family: var(--font-mono); }
+  .num-row input.invalid {
+    border-color: var(--danger);
+    color: var(--danger);
+  }
   .unit-label {
     color: var(--fg-muted);
     font-weight: 500;
+    font-family: var(--font-mono);
+  }
+  .range-hint {
+    color: var(--fg-muted);
+    font-size: 0.8em;
     font-family: var(--font-mono);
   }
 </style>
