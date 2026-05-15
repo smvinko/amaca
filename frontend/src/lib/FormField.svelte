@@ -166,9 +166,6 @@
 
 <div class="field">
   <span class="field-label">{schema.title ?? name}</span>
-  {#if schema.description}
-    <span class="field-help">{schema.description}</span>
-  {/if}
 
   {#if options}
     <div class="option-group" role="radiogroup">
