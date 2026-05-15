@@ -88,14 +88,22 @@
   $: {
     // Sync FROM the bound value when it changes for a reason OTHER than
     // our own keystroke (e.g. initial mount, policy clamp on resubmit).
-    const parsed = numText.trim() === '' ? undefined : Number(numText);
-    const native =
-      typeof parsed === 'number' && isFinite(parsed)
-        ? (typeStr === 'integer' ? Math.trunc(parsed) : parsed) * factor
-        : undefined;
-    if (!numInitialised || (typeof value === 'number' && value !== native)) {
-      numText = typeof value === 'number' ? fmtNumber(value / factor) : '';
-      numInitialised = true;
+    // CRUCIAL: skip the sync while the user is mid-typing an incomplete
+    // number (e.g. "4.3e" before they've typed the exponent), otherwise
+    // we'd rewrite their in-progress keystrokes back to a "valid" form
+    // and they'd never be able to enter scientific notation.
+    const raw = numText.trim();
+    const parsed = raw === '' ? undefined : Number(raw);
+    const midTyping = raw !== '' && !isFinite(parsed as number);
+    if (!midTyping) {
+      const native =
+        typeof parsed === 'number' && isFinite(parsed)
+          ? (typeStr === 'integer' ? Math.trunc(parsed) : parsed) * factor
+          : undefined;
+      if (!numInitialised || (typeof value === 'number' && value !== native)) {
+        numText = typeof value === 'number' ? fmtNumber(value / factor) : '';
+        numInitialised = true;
+      }
     }
   }
 
