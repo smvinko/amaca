@@ -1,11 +1,16 @@
 <script lang="ts">
   /**
    * Generic form field driven by one entry in a JSON-Schema `properties` map.
-   * Handles the property kinds pydantic v2 emits: integer/number/string/boolean
-   * with optional min/max constraints, plus enum-style fields (rendered as a
-   * wrapped button group). Enum options are read from any of three encodings:
-   * `oneOf [{const, title}]` (preferred, carries labels), `enum [v1, v2, ...]`,
-   * or `anyOf [{const: v}, ...]`.
+   * Renders:
+   *   - enum-style fields (oneOf / enum / anyOf) → wrapped button group
+   *   - boolean → checkbox + On/Off label
+   *   - integer / number → plain HTML number input (with policy min/max if set)
+   *   - everything else → text input
+   *
+   * Per-field display-unit conversion is honoured: a schema entry of the form
+   *   "x-display-unit": { factor: 1e-15, label: "fs" }
+   * makes the user type/edit in `label` units while the bound (stored) value
+   * stays in the native unit (the input × factor).
    */
   import type { JsonSchemaProperty } from './api';
 
@@ -38,34 +43,39 @@
 
   $: options = enumOptions(schema);
   $: typeStr = (schema.type ?? '').toString();
-  $: minVal =
+  $: rawMin =
     (typeof schema.minimum === 'number' ? schema.minimum :
      typeof schema.exclusiveMinimum === 'number' ? schema.exclusiveMinimum + (typeStr === 'integer' ? 1 : 1e-12) :
      undefined);
-  $: maxVal =
+  $: rawMax =
     (typeof schema.maximum === 'number' ? schema.maximum :
      typeof schema.exclusiveMaximum === 'number' ? schema.exclusiveMaximum - (typeStr === 'integer' ? 1 : 1e-12) :
      undefined);
+
+  // x-display-unit: user types in `label` units, value is stored in
+  // native units (= input × factor).
+  $: displayUnit = (schema as Record<string, unknown>)['x-display-unit'] as
+    | { factor: number; label: string }
+    | undefined;
+  $: factor = displayUnit?.factor ?? 1;
+  $: unitLabel = displayUnit?.label ?? '';
+
+  $: displayValue =
+    typeof value === 'number' ? value / factor : ('' as const);
+  $: displayMin = typeof rawMin === 'number' ? rawMin / factor : undefined;
+  $: displayMax = typeof rawMax === 'number' ? rawMax / factor : undefined;
   $: stepVal = typeStr === 'integer' ? 1 : 'any';
 
-  // Heuristic: render fields with a wide dynamic range (e.g. densities,
-  // intensities, sub-nanosecond times) as a mantissa+exponent pair so
-  // the user types e.g. `4.31` × 10 to the `22` instead of typing
-  // `4.31e22` into a plain number input.
-  $: useScientific =
-    typeStr === 'number' &&
-    typeof maxVal === 'number' &&
-    (maxVal >= 1e6 || (maxVal > 0 && maxVal <= 1e-3));
-
-  function coerce(raw: string): unknown {
-    if (typeStr === 'integer') return raw === '' ? undefined : Math.trunc(Number(raw));
-    if (typeStr === 'number')  return raw === '' ? undefined : Number(raw);
-    return raw;
+  function onNumberInput(ev: Event) {
+    const target = ev.target as HTMLInputElement;
+    const raw = target.value;
+    if (raw === '') { value = undefined; return; }
+    const n = typeStr === 'integer' ? Math.trunc(Number(raw)) : Number(raw);
+    value = n * factor;
   }
 
-  function onInput(ev: Event) {
-    const target = ev.target as HTMLInputElement;
-    value = coerce(target.value);
+  function onTextInput(ev: Event) {
+    value = (ev.target as HTMLInputElement).value;
   }
 
   function onBool(ev: Event) {
@@ -76,46 +86,8 @@
     value = v;
   }
 
-  // ----- scientific input wiring ------------------------------------------ //
-  // Local state for the mantissa+exponent pair. Synced one-way from the
-  // bound `value` (when it changes externally) and writes back the
-  // composed product when either input changes.
-  let mantissa = 0;
-  let exponent = 0;
-
-  function decompose(v: number): { m: number; e: number } {
-    if (!isFinite(v) || v === 0) return { m: 0, e: 0 };
-    const e = Math.floor(Math.log10(Math.abs(v)));
-    return { m: v / 10 ** e, e };
-  }
-
-  // Sync mantissa/exponent from value when the two don't already match
-  // (prevents the reactive loop when the user's own edits update value).
-  $: if (typeof value === 'number' && isFinite(value)) {
-    const composed = mantissa * 10 ** exponent;
-    const tol = Math.max(1e-12, Math.abs(value) * 1e-9);
-    if (Math.abs(composed - value) > tol) {
-      const d = decompose(value);
-      mantissa = Number(d.m.toFixed(4));
-      exponent = d.e;
-    }
-  }
-
-  function onMantissa(ev: Event) {
-    mantissa = Number((ev.target as HTMLInputElement).value);
-    value = mantissa * 10 ** exponent;
-  }
-
-  function onExponent(ev: Event) {
-    exponent = Math.trunc(Number((ev.target as HTMLInputElement).value));
-    value = mantissa * 10 ** exponent;
-  }
-
-  // Lifted casts (Svelte 4's template parser doesn't allow `as` inside attribute exprs)
-  $: numericValue = typeof value === 'number' ? value : ('' as const);
-  $: stringValue  = typeof value === 'string' ? value : '';
-  $: boolValue    = Boolean(value);
-  $: mantissaDisplay = typeof mantissa === 'number' ? mantissa.toFixed(2) : '—';
+  $: stringValue = typeof value === 'string' ? value : '';
+  $: boolValue   = Boolean(value);
 </script>
 
 <div class="field">
@@ -143,43 +115,27 @@
       <input type="checkbox" checked={boolValue} on:change={onBool} />
       <span class="toggle-text">{boolValue ? 'On' : 'Off'}</span>
     </label>
-  {:else if useScientific}
-    <div class="sci-input">
-      <input
-        type="number"
-        class="mantissa"
-        value={mantissa}
-        step="0.01"
-        on:input={onMantissa}
-      />
-      <span class="sci-mult">× 10</span>
-      <input
-        type="number"
-        class="exponent"
-        value={exponent}
-        step="1"
-        on:input={onExponent}
-      />
-    </div>
-    <span class="sci-preview muted">
-      = {mantissaDisplay} × 10<sup>{exponent}</sup>
-    </span>
   {:else if typeStr === 'integer' || typeStr === 'number'}
-    <input
-      type="number"
-      value={numericValue}
-      min={minVal}
-      max={maxVal}
-      step={stepVal}
-      on:input={onInput}
-    />
+    <div class="num-row">
+      <input
+        type="number"
+        value={displayValue}
+        min={displayMin}
+        max={displayMax}
+        step={stepVal}
+        on:input={onNumberInput}
+      />
+      {#if unitLabel}
+        <span class="unit-label">{unitLabel}</span>
+      {/if}
+    </div>
   {:else}
     <input
       type="text"
       value={stringValue}
       minlength={schema.minLength}
       maxlength={schema.maxLength}
-      on:input={onInput}
+      on:input={onTextInput}
     />
   {/if}
 </div>
@@ -191,20 +147,11 @@
     gap: 0.35rem;
     margin-bottom: 0.85rem;
   }
-  .field-label {
-    font-weight: 500;
-  }
-  .field-help {
-    color: var(--fg-muted);
-    font-size: 0.9em;
-  }
+  .field-label { font-weight: 500; }
+  .field-help { color: var(--fg-muted); font-size: 0.9em; }
 
-  /* Button-group for enum fields */
   .option-group {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-    margin-top: 0.15rem;
+    display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.15rem;
   }
   .option-button {
     padding: 0.35rem 0.75rem;
@@ -229,7 +176,6 @@
     font-weight: 500;
   }
 
-  /* Boolean toggle with explicit on/off label */
   .toggle {
     display: inline-flex;
     align-items: center;
@@ -240,21 +186,15 @@
   .toggle input { width: 1.1rem; height: 1.1rem; }
   .toggle-text { font-size: 0.95em; }
 
-  /* Scientific-notation input: mantissa × 10^exponent */
-  .sci-input {
+  .num-row {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.5rem;
   }
-  .sci-input .mantissa { width: 6rem; }
-  .sci-input .exponent { width: 4rem; }
-  .sci-mult { color: var(--fg-muted); }
-  .sci-preview {
+  .num-row input { width: 10rem; }
+  .unit-label {
+    color: var(--fg-muted);
+    font-weight: 500;
     font-family: var(--font-mono);
-    font-size: 0.9em;
-    margin-top: 0.1rem;
-  }
-  .sci-preview sup {
-    font-size: 0.8em;
   }
 </style>

@@ -75,6 +75,9 @@ export interface JsonSchemaProperty {
   enum?: unknown[];
   anyOf?: { type?: string; const?: unknown }[];
   oneOf?: { const?: unknown; title?: string }[];
+  // amaca custom: display-unit override (user types in `label` units;
+  // bound value = input * factor in the field's native unit).
+  'x-display-unit'?: { factor: number; label: string };
   [k: string]: unknown;
 }
 
