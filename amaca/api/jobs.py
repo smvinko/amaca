@@ -109,15 +109,29 @@ async def get_job(job_id: int, user: CurrentUser, db: DB) -> JobOut:
 
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def cancel_job(
+async def cancel_or_delete_job(
     job_id: int, user: CurrentUser, db: DB, runner: Runner,
 ) -> None:
+    """Two semantics in one verb:
+
+    - If the job is still live (queued / running), request a cancel.
+    - If the job is terminal (succeeded / failed / cancelled), delete
+      the DB row AND the on-disk work directory.
+
+    The "cancel a finished job" case used to 409; now it just deletes.
+    UI shows a single "Delete" button on the job page that does the
+    right thing in each state.
+    """
+    import shutil
     job = _ensure_visible(db.get(models.Job, job_id), user)
-    if job.status_enum.is_terminal:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, f"job already {job.status}",
-        )
-    runner.request_cancel(job.id)
+    if not job.status_enum.is_terminal:
+        runner.request_cancel(job.id)
+        return
+    job_dir = runner.job_dir(job.id)
+    db.delete(job)
+    db.commit()
+    if job_dir.exists():
+        shutil.rmtree(job_dir, ignore_errors=True)
 
 
 @router.get("/{job_id}/files/{file_path:path}")

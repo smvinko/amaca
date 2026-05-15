@@ -82,6 +82,8 @@ export interface JsonSchemaProperty {
   // amaca custom: display-unit override (user types in `label` units;
   // bound value = input * factor in the field's native unit).
   'x-display-unit'?: { factor: number; label: string };
+  // amaca custom: visibility gate driven by another field's value.
+  'x-show-when'?: { field: string; equals: unknown };
   [k: string]: unknown;
 }
 

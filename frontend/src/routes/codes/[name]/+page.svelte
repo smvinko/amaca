@@ -70,20 +70,36 @@
 
   // Resolve the form's groups: take the schema's x-input-groups list,
   // keep only the fields that actually exist, then put any leftover
-  // properties in an "Other" group at the end.
+  // properties in an "Other" group at the end. Fields whose
+  // x-show-when predicate isn't met against current `values` are
+  // filtered out per render — this is what makes spectrum_* fields
+  // pop in only when `generate_spectrum` is on.
+  function fieldVisible(name: string): boolean {
+    if (!code) return true;
+    const prop = code.input_schema.properties?.[name];
+    const swh = prop?.['x-show-when'];
+    if (!swh || typeof swh !== 'object') return true;
+    const want = swh.equals;
+    const got = values[swh.field];
+    return got === want;
+  }
+
   $: groups = (() => {
     if (!code) return [];
     const props = code.input_schema.properties ?? {};
     const declared = code.input_schema['x-input-groups'] ?? [];
     const seen = new Set<string>();
     const out: { title: string | null; fields: string[] }[] = [];
+    // values is read inside fieldVisible — referencing it here makes
+    // Svelte's reactivity rerun when the user toggles a gating field.
+    void values;
     for (const g of declared) {
-      const fields = g.fields.filter((f) => f in props);
+      const fields = g.fields.filter((f) => f in props && fieldVisible(f));
       if (fields.length === 0) continue;
-      fields.forEach((f) => seen.add(f));
+      g.fields.forEach((f) => seen.add(f));   // mark gated-but-declared as "claimed"
       out.push({ title: g.title, fields });
     }
-    const leftover = Object.keys(props).filter((f) => !seen.has(f));
+    const leftover = Object.keys(props).filter((f) => !seen.has(f) && fieldVisible(f));
     if (leftover.length > 0) {
       out.push({ title: declared.length === 0 ? null : 'Other', fields: leftover });
     }

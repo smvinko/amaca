@@ -97,15 +97,21 @@ async def test_cancel_running_job_round_trip(
     assert r3.json()["status"] == JobStatus.CANCELLED.value
 
 
-async def test_cancel_already_finished_returns_409(
+async def test_delete_finished_job_removes_row(
     client: AsyncClient, runner: JobRunner
 ) -> None:
+    """DELETE on a terminal job permanently removes the row + work dir.
+
+    (DELETE on a still-live job just cancels — covered by
+    test_cancel_running_job_round_trip above.)"""
     payload = {"code": "demo", "inputs": DemoInputs().model_dump()}
     r = await client.post("/api/jobs", json=payload)
     jid = r.json()["id"]
     await runner.wait(jid)
     r2 = await client.delete(f"/api/jobs/{jid}")
-    assert r2.status_code == 409
+    assert r2.status_code == 204
+    r3 = await client.get(f"/api/jobs/{jid}")
+    assert r3.status_code == 404
 
 
 async def test_get_job_logs(client: AsyncClient, runner: JobRunner) -> None:

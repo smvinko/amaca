@@ -59,6 +59,20 @@
     finally { cancelling = false; }
   }
 
+  let deleting = false;
+  async function deleteJob() {
+    if (!job) return;
+    if (!confirm(`Delete job #${job.id} and its on-disk artifacts? This cannot be undone.`)) return;
+    deleting = true;
+    try {
+      await api.cancelJob(job.id);    // same endpoint: cancel-if-live, delete-if-terminal
+      goto('/jobs');
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+      deleting = false;
+    }
+  }
+
   function dur(start: string | null, end: string | null): string {
     if (!start) return '—';
     const s = new Date(start).getTime();
@@ -85,6 +99,8 @@
     duration {dur(job.started_at, job.finished_at)}
     {#if !['succeeded', 'failed', 'cancelled'].includes(job.status)}
       &nbsp;·&nbsp; <button on:click={cancel} disabled={cancelling}>{cancelling ? 'cancelling…' : 'cancel'}</button>
+    {:else}
+      &nbsp;·&nbsp; <button on:click={deleteJob} disabled={deleting}>{deleting ? 'deleting…' : 'delete'}</button>
     {/if}
   </p>
 
