@@ -64,7 +64,21 @@ export interface JsonSchema {
   // is an explicit multi-column layout: each inner array is one column
   // (top-to-bottom). Group fields not listed in any column render
   // full-width, in declared order, before the column block.
-  'x-input-groups'?: { title: string; fields: string[]; columns?: string[][] }[];
+  'x-input-groups'?: {
+    title: string;
+    fields: string[];
+    columns?: string[][];
+    // Optional read-only preview plot rendered below the group. `kind`
+    // selects a renderer; `fields` maps each role the renderer needs
+    // to a form field name (the plot recomputes live from their values).
+    plot?: {
+      kind: string;
+      title?: string;
+      fields: Record<string, string>;
+      x_label?: string;
+      y_label?: string;
+    };
+  }[];
   [k: string]: unknown;
 }
 
@@ -94,6 +108,9 @@ export interface JsonSchemaProperty {
   // of the type-default control (e.g. 'periodic-table' for an enum of
   // element symbols).
   'x-widget'?: string;
+  // amaca custom: this field must occupy its own full-width row in its
+  // group (siblings never share/wrap beside it, at any width).
+  'x-full-row'?: boolean;
   [k: string]: unknown;
 }
 

@@ -4,6 +4,15 @@
   import { goto } from '$app/navigation';
   import { api, type CodeOut, ApiError } from '$lib/api';
   import FormField from '$lib/FormField.svelte';
+  import GroupPlot from '$lib/GroupPlot.svelte';
+
+  type GroupPlotSpec = {
+    kind: string;
+    title?: string;
+    fields: Record<string, string>;
+    x_label?: string;
+    y_label?: string;
+  };
 
   let code = $state<CodeOut | null>(null);
   let values = $state<Record<string, unknown>>({});
@@ -95,6 +104,7 @@
     title: string | null;
     fields: string[];
     columns: string[][];
+    plot: GroupPlotSpec | null;
   };
 
   const groups = $derived.by((): Group[] => {
@@ -114,13 +124,22 @@
       const columns = colDecl
         .map((col) => col.filter(visible))
         .filter((col) => col.length > 0);
-      if (fields.length === 0 && columns.length === 0) continue;
+      // Preview plot shows only when every field it binds is visible
+      // (so it falls away in modes where its inputs are gated off).
+      const plot =
+        g.plot && Object.values(g.plot.fields).every(visible)
+          ? (g.plot as GroupPlotSpec)
+          : null;
+      if (fields.length === 0 && columns.length === 0 && !plot) continue;
       g.fields.forEach((f) => seen.add(f));   // mark gated-but-declared as "claimed"
-      out.push({ title: g.title, fields, columns });
+      out.push({ title: g.title, fields, columns, plot });
     }
     const leftover = Object.keys(props).filter((f) => !seen.has(f) && fieldVisible(f));
     if (leftover.length > 0) {
-      out.push({ title: declared.length === 0 ? null : 'Other', fields: leftover, columns: [] });
+      out.push({
+        title: declared.length === 0 ? null : 'Other',
+        fields: leftover, columns: [], plot: null
+      });
     }
     return out;
   });
@@ -193,6 +212,9 @@
             {/each}
           </div>
         {/if}
+        {#if group.plot}
+          <GroupPlot plot={group.plot} {values} />
+        {/if}
       </section>
     {/each}
 
@@ -240,6 +262,12 @@
   .group-fields > :global(.field) {
     flex: 1 1 14rem;
     margin-bottom: 0.6rem;
+  }
+  /* A field marked x-full-row claims the whole row (and forces a
+     wrap), so a gating selector always sits alone and everything
+     revealed after it stacks below — at any window width. */
+  .group-fields > :global(.field.full-row) {
+    flex: 1 0 100%;
   }
   /* Explicit multi-column block (x-input-groups[].columns). Sits below
      any full-width flow fields in the same group. */

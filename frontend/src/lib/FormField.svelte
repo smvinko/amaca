@@ -175,7 +175,7 @@
   const boolValue   = $derived(Boolean(value));
 </script>
 
-<div class="field">
+<div class="field" class:full-row={schema['x-full-row'] === true}>
   <span class="field-label">{schema.title ?? name}</span>
 
   {#if options && widget === 'periodic-table'}
