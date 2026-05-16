@@ -81,9 +81,11 @@
     const prop = code.input_schema.properties?.[name];
     const swh = prop?.['x-show-when'];
     if (!swh || typeof swh !== 'object') return true;
-    const want = swh.equals;
     const got = values[swh.field];
-    return got === want;
+    if ('not_equals' in swh && swh.not_equals !== undefined) {
+      return got !== swh.not_equals;
+    }
+    return got === swh.equals;
   }
 
   // A group renders as: `fields` (flow, full-width, declared order)

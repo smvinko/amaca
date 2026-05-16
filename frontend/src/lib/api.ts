@@ -88,7 +88,8 @@ export interface JsonSchemaProperty {
   // bound value = input * factor in the field's native unit).
   'x-display-unit'?: { factor: number; label: string };
   // amaca custom: visibility gate driven by another field's value.
-  'x-show-when'?: { field: string; equals: unknown };
+  // Exactly one of equals / not_equals is set.
+  'x-show-when'?: { field: string; equals?: unknown; not_equals?: unknown };
   // amaca custom: render this field with a richer named widget instead
   // of the type-default control (e.g. 'periodic-table' for an enum of
   // element symbols).
