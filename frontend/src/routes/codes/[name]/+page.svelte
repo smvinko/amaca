@@ -195,6 +195,9 @@
           <div class="group-fields">
             {#each group.fields as fieldName}
               {@render fieldCtl(fieldName)}
+              {#if code?.input_schema.properties?.[fieldName]?.['x-row-break']}
+                <div class="row-break"></div>
+              {/if}
             {/each}
           </div>
         {/if}
@@ -256,6 +259,14 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem 1.5rem;
+  }
+  /* x-row-break: a zero-height full-width flex item forces the next
+     fields onto a new line, so the row ends right after the field
+     it follows (which still shares its row with earlier siblings). */
+  .group-fields > .row-break {
+    flex: 0 0 100%;
+    height: 0;
+    margin: 0;
   }
   /* Fields share the row evenly with a soft min-width so things wrap
      onto another line at narrow widths instead of squashing. */

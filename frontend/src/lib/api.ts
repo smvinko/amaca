@@ -111,6 +111,9 @@ export interface JsonSchemaProperty {
   // amaca custom: this field must occupy its own full-width row in its
   // group (siblings never share/wrap beside it, at any width).
   'x-full-row'?: boolean;
+  // amaca custom: end the flow row after this field — later fields
+  // wrap below it (it still shares its row with earlier siblings).
+  'x-row-break'?: boolean;
   [k: string]: unknown;
 }
 
