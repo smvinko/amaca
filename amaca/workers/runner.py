@@ -163,16 +163,30 @@ class JobRunner:
         def check_cancelled() -> bool:
             return self._cancel_flags.get(job_id, False)
 
-        def progress(fraction: float, message: str = "") -> None:
+        def progress(
+            fraction: float | None = None,
+            message: str = "",
+            *,
+            step: int | None = None,
+            total: int | None = None,
+            phase: str | None = None,
+        ) -> None:
             # Called from the adapter's worker thread (or a helper
-            # thread it spawns). In-memory + broadcast only — no DB
-            # write, so it's cheap to call at high frequency.
-            frac = 0.0 if fraction < 0 else 1.0 if fraction > 1 else float(fraction)
-            self._progress[job_id] = {"fraction": frac, "message": message}
-            self._broadcast(
-                job_id,
-                {"type": "progress", "fraction": frac, "message": message},
-            )
+            # thread / subprocess monitor). In-memory + broadcast only —
+            # no DB write, so it's cheap to call at high frequency.
+            if fraction is None and step is not None and total:
+                fraction = step / total
+            frac = float(fraction or 0.0)
+            frac = 0.0 if frac < 0 else 1.0 if frac > 1 else frac
+            snap: dict[str, Any] = {"fraction": frac, "message": message}
+            if step is not None:
+                snap["step"] = step
+            if total is not None:
+                snap["total"] = total
+            if phase is not None:
+                snap["phase"] = phase
+            self._progress[job_id] = snap
+            self._broadcast(job_id, {"type": "progress", **snap})
 
         ctx = JobContext(
             job_id=job_id, user_id=owner_id, work_dir=job_dir,

@@ -140,6 +140,42 @@ GitHub:
 
 ---
 
+## 2b. Progress reporting (standard for long / blocking codes)
+
+`JobContext` carries `progress(fraction=None, message="", *, step=None,
+total=None, phase=None)`. It's optional, streamed live to the job page
+(bar + "phase — step/total — elapsed"), and surfaced on `JobOut`
+(`progress*` fields, running jobs only). `fraction` defaults to
+`step/total`.
+
+Two ways a code feeds it:
+
+1. **Cooperative in-process (pure-Python adapters):** call
+   `ctx.progress(...)` directly from `run()`. Only works if the code
+   yields the GIL (a blocking native/SWIG call does **not** — it also
+   freezes the worker).
+
+2. **Out-of-process (the standard for native / blocking / non-Python
+   codes — recommended):** the adapter launches the code as a
+   subprocess via `amaca.core.run_monitored(argv, ctx, cwd=…)`. The
+   child emits progress as single stdout/stderr lines:
+
+   ```
+   @amaca:progress {"phase":"kinetics","step":123,"total":1000,"message":"…"}
+   ```
+
+   `run_monitored` parses each `@amaca:progress` line → `ctx.progress`,
+   forwards every other line to `ctx.log`, polls `check_cancelled()`
+   (→ SIGTERM/SIGKILL the child), and raises on non-zero exit. All
+   fields optional; `fraction` defaults to `step/total`.
+
+   Running out-of-process is what makes progress observable at all,
+   keeps the backend responsive during a run, and makes cancellation
+   and crash isolation work. This is the expected pattern for any
+   compute-heavy code; the wire-format is code- and language-agnostic.
+
+---
+
 ## 3. Architecture
 
 ```

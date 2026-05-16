@@ -64,9 +64,13 @@ class JobOut(BaseModel):
     started_at: datetime | None = None
     finished_at: datetime | None = None
     # Live run progress (running jobs only; null otherwise). `progress`
-    # is 0..1; `progress_message` an optional short status line.
+    # is 0..1; `progress_message` an optional short status line;
+    # step/total are a real step counter and `phase` the current stage.
     progress: float | None = None
     progress_message: str | None = None
+    progress_step: int | None = None
+    progress_total: int | None = None
+    progress_phase: str | None = None
 
 
 class JobLogLine(BaseModel):

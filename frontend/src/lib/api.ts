@@ -157,6 +157,9 @@ export interface JobOut {
   // Live run progress (running jobs only; null otherwise). 0..1.
   progress: number | null;
   progress_message: string | null;
+  progress_step: number | null;
+  progress_total: number | null;
+  progress_phase: string | null;
 }
 
 export interface JobLogLine { ts: string; line: string; }

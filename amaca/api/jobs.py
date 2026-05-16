@@ -42,6 +42,9 @@ def _to_out(
         finished_at=job.finished_at,
         progress=progress.get("fraction") if progress else None,
         progress_message=progress.get("message") if progress else None,
+        progress_step=progress.get("step") if progress else None,
+        progress_total=progress.get("total") if progress else None,
+        progress_phase=progress.get("phase") if progress else None,
     )
 
 

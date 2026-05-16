@@ -12,7 +12,14 @@
   let error = $state('');
   let ws: WebSocket | null = null;
   let cancelling = $state(false);
-  let progress = $state<{ fraction: number; message: string } | null>(null);
+  type Progress = {
+    fraction: number;
+    message: string;
+    step?: number | null;
+    total?: number | null;
+    phase?: string | null;
+  };
+  let progress = $state<Progress | null>(null);
   // Ticks every second so elapsed time is live even when no progress
   // event has arrived yet (so the page never looks frozen).
   let nowMs = $state(Date.now());
@@ -47,7 +54,11 @@
       logLines = logs.map((row) => row.line);
       // Seed the bar if the job is mid-run when the page loads.
       if (job.progress != null) {
-        progress = { fraction: job.progress, message: job.progress_message ?? '' };
+        progress = {
+          fraction: job.progress, message: job.progress_message ?? '',
+          step: job.progress_step, total: job.progress_total,
+          phase: job.progress_phase,
+        };
       }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -73,7 +84,10 @@
       if (event.type === 'log') {
         logLines = [...logLines, event.line];
       } else if (event.type === 'progress') {
-        progress = { fraction: event.fraction, message: event.message ?? '' };
+        progress = {
+          fraction: event.fraction, message: event.message ?? '',
+          step: event.step, total: event.total, phase: event.phase,
+        };
       } else if (event.type === 'status') {
         // Refetch the full job to pick up outputs/finished_at/error_text.
         try { job = await api.getJob(jobId); } catch { /* ignore */ }
@@ -147,7 +161,7 @@
           <div class="pfill" style="width: {Math.round(progress.fraction * 100)}%"></div>
         </div>
         <p class="muted pmeta">
-          {Math.round(progress.fraction * 100)}%{#if progress.message} · {progress.message}{/if}{#if elapsedS != null} · {elapsedS.toFixed(0)} s elapsed{/if}
+          {#if progress.phase}{progress.phase} · {/if}{Math.round(progress.fraction * 100)}%{#if progress.step != null && progress.total != null} · step {progress.step}/{progress.total}{/if}{#if progress.message} · {progress.message}{/if}{#if elapsedS != null} · {elapsedS.toFixed(0)} s elapsed{/if}
         </p>
       {:else}
         <div class="pbar indeterminate"><div class="pfill-i"></div></div>
