@@ -21,7 +21,7 @@
     value: unknown;
   } = $props();
 
-  // symbol → { z, period (row), group (column 1–18) }, periods 1–4.
+  // symbol → { z, period (row), group (column 1–18) }, periods 1–5.
   const PT: Record<string, { z: number; period: number; group: number }> = {
     H:  { z: 1,  period: 1, group: 1  }, He: { z: 2,  period: 1, group: 18 },
     Li: { z: 3,  period: 2, group: 1  }, Be: { z: 4,  period: 2, group: 2  },
@@ -40,7 +40,16 @@
     Cu: { z: 29, period: 4, group: 11 }, Zn: { z: 30, period: 4, group: 12 },
     Ga: { z: 31, period: 4, group: 13 }, Ge: { z: 32, period: 4, group: 14 },
     As: { z: 33, period: 4, group: 15 }, Se: { z: 34, period: 4, group: 16 },
-    Br: { z: 35, period: 4, group: 17 }, Kr: { z: 36, period: 4, group: 18 }
+    Br: { z: 35, period: 4, group: 17 }, Kr: { z: 36, period: 4, group: 18 },
+    Rb: { z: 37, period: 5, group: 1  }, Sr: { z: 38, period: 5, group: 2  },
+    Y:  { z: 39, period: 5, group: 3  }, Zr: { z: 40, period: 5, group: 4  },
+    Nb: { z: 41, period: 5, group: 5  }, Mo: { z: 42, period: 5, group: 6  },
+    Tc: { z: 43, period: 5, group: 7  }, Ru: { z: 44, period: 5, group: 8  },
+    Rh: { z: 45, period: 5, group: 9  }, Pd: { z: 46, period: 5, group: 10 },
+    Ag: { z: 47, period: 5, group: 11 }, Cd: { z: 48, period: 5, group: 12 },
+    In: { z: 49, period: 5, group: 13 }, Sn: { z: 50, period: 5, group: 14 },
+    Sb: { z: 51, period: 5, group: 15 }, Te: { z: 52, period: 5, group: 16 },
+    I:  { z: 53, period: 5, group: 17 }, Xe: { z: 54, period: 5, group: 18 }
   };
 
   // Selectable options keyed by symbol, for quick lookup.
