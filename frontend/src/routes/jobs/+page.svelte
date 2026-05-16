@@ -3,8 +3,8 @@
   import { api, type JobListItem } from '$lib/api';
   import JobStatus from '$lib/JobStatus.svelte';
 
-  let jobs: JobListItem[] | null = null;
-  let error = '';
+  let jobs = $state<JobListItem[] | null>(null);
+  let error = $state('');
 
   async function load() {
     try {

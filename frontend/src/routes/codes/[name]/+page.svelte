@@ -5,17 +5,17 @@
   import { api, type CodeOut, ApiError } from '$lib/api';
   import FormField from '$lib/FormField.svelte';
 
-  let code: CodeOut | null = null;
-  let values: Record<string, unknown> = {};
-  let loadError = '';
-  let submitError = '';
-  let busy = false;
+  let code = $state<CodeOut | null>(null);
+  let values = $state<Record<string, unknown>>({});
+  let loadError = $state('');
+  let submitError = $state('');
+  let busy = $state(false);
   // Don't persist to localStorage until we've finished restoring (avoids
   // a brief window where partial state would clobber the saved snapshot).
-  let storageReady = false;
+  let storageReady = $state(false);
 
-  $: name = $page.params.name;
-  $: storageKey = `amaca:inputs:${name}`;
+  const name = $derived($page.params.name as string);
+  const storageKey = $derived(`amaca:inputs:${name}`);
 
   onMount(load);
 
@@ -55,9 +55,11 @@
   // Persist every change. Skipped until storageReady so the initial
   // load doesn't immediately overwrite the saved snapshot with the
   // schema-default seed.
-  $: if (storageReady && typeof localStorage !== 'undefined') {
-    try { localStorage.setItem(storageKey, JSON.stringify(values)); } catch { /* quota etc. */ }
-  }
+  $effect(() => {
+    if (storageReady && typeof localStorage !== 'undefined') {
+      try { localStorage.setItem(storageKey, JSON.stringify(values)); } catch { /* quota etc. */ }
+    }
+  });
 
   function resetDefaults() {
     if (!code) return;
@@ -84,7 +86,7 @@
     return got === want;
   }
 
-  $: groups = (() => {
+  const groups = $derived.by(() => {
     if (!code) return [];
     const props = code.input_schema.properties ?? {};
     const declared = code.input_schema['x-input-groups'] ?? [];
@@ -104,7 +106,7 @@
       out.push({ title: declared.length === 0 ? null : 'Other', fields: leftover });
     }
     return out;
-  })();
+  });
 
   async function submit() {
     if (!code) return;
@@ -163,12 +165,12 @@
 
     <div class="row" style="margin-top: 1rem; justify-content: space-between">
       <div class="row">
-        <button class="primary" on:click={submit} disabled={busy}>
+        <button class="primary" onclick={submit} disabled={busy}>
           {busy ? 'Submitting…' : 'Submit'}
         </button>
         <a href="/" class="muted">cancel</a>
       </div>
-      <button type="button" on:click={resetDefaults} title="Restore schema defaults and forget this browser's saved values">
+      <button type="button" onclick={resetDefaults} title="Restore schema defaults and forget this browser's saved values">
         Reset to defaults
       </button>
     </div>

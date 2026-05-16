@@ -14,9 +14,15 @@
    */
   import type { JsonSchemaProperty } from './api';
 
-  export let name: string;
-  export let schema: JsonSchemaProperty;
-  export let value: unknown;
+  let {
+    name,
+    schema,
+    value = $bindable()
+  }: {
+    name: string;
+    schema: JsonSchemaProperty;
+    value: unknown;
+  } = $props();
 
   function enumOptions(
     s: JsonSchemaProperty
@@ -41,24 +47,24 @@
     return null;
   }
 
-  $: options = enumOptions(schema);
-  $: typeStr = (schema.type ?? '').toString();
-  $: rawMin =
+  const options = $derived(enumOptions(schema));
+  const typeStr = $derived((schema.type ?? '').toString());
+  const rawMin = $derived(
     (typeof schema.minimum === 'number' ? schema.minimum :
      typeof schema.exclusiveMinimum === 'number' ? schema.exclusiveMinimum + (typeStr === 'integer' ? 1 : 1e-12) :
-     undefined);
-  $: rawMax =
+     undefined));
+  const rawMax = $derived(
     (typeof schema.maximum === 'number' ? schema.maximum :
      typeof schema.exclusiveMaximum === 'number' ? schema.exclusiveMaximum - (typeStr === 'integer' ? 1 : 1e-12) :
-     undefined);
+     undefined));
 
   // x-display-unit: user types in `label` units, value is stored in
   // native units (= input × factor).
-  $: displayUnit = (schema as Record<string, unknown>)['x-display-unit'] as
+  const displayUnit = $derived((schema as Record<string, unknown>)['x-display-unit'] as
     | { factor: number; label: string }
-    | undefined;
-  $: factor = displayUnit?.factor ?? 1;
-  $: unitLabel = displayUnit?.label ?? '';
+    | undefined);
+  const factor = $derived(displayUnit?.factor ?? 1);
+  const unitLabel = $derived(displayUnit?.label ?? '');
 
   // Format a numeric display value. Floating-point noise (e.g. 1.21e-13 ÷
   // 1e-15 = 121.00000000000001) is dropped by rounding through 12 sig
@@ -82,10 +88,10 @@
   //   - max="1e22" attributes interact weirdly with very-large values
   // We parse on every keystroke; invalid mid-states just leave the
   // bound `value` unchanged until the text parses to a finite number.
-  let numText = '';
-  let numInitialised = false;
+  let numText = $state('');
+  let numInitialised = $state(false);
 
-  $: {
+  $effect(() => {
     // Sync FROM the bound value when it changes for a reason OTHER than
     // our own keystroke (e.g. initial mount, policy clamp on resubmit).
     // CRUCIAL: skip the sync while the user is mid-typing an incomplete
@@ -105,10 +111,10 @@
         numInitialised = true;
       }
     }
-  }
+  });
 
-  $: displayMin = typeof rawMin === 'number' ? fmtNumber(rawMin / factor) : '';
-  $: displayMax = typeof rawMax === 'number' ? fmtNumber(rawMax / factor) : '';
+  const displayMin = $derived(typeof rawMin === 'number' ? fmtNumber(rawMin / factor) : '');
+  const displayMax = $derived(typeof rawMax === 'number' ? fmtNumber(rawMax / factor) : '');
 
   function onNumberInput(ev: Event) {
     numText = (ev.target as HTMLInputElement).value;
@@ -143,14 +149,14 @@
 
   // Validity flag drives the .invalid class — covers paste-then-edit
   // and the brief mid-typing window before onNumberInput's coercion.
-  $: numTextValid = (() => {
+  const numTextValid = $derived.by(() => {
     const raw = numText.trim();
     if (raw === '') return true;
     const n = Number(raw);
     if (!isFinite(n)) return false;
     if (typeStr === 'integer' && !Number.isInteger(n)) return false;
     return true;
-  })();
+  });
 
   function onBool(ev: Event) {
     value = (ev.target as HTMLInputElement).checked;
@@ -160,8 +166,8 @@
     value = v;
   }
 
-  $: stringValue = typeof value === 'string' ? value : '';
-  $: boolValue   = Boolean(value);
+  const stringValue = $derived(typeof value === 'string' ? value : '');
+  const boolValue   = $derived(Boolean(value));
 </script>
 
 <div class="field">
@@ -175,7 +181,7 @@
           class="option-button"
           class:active={opt.value === value}
           aria-pressed={opt.value === value}
-          on:click={() => pickOption(opt.value)}
+          onclick={() => pickOption(opt.value)}
         >
           {opt.label}
         </button>
@@ -183,7 +189,7 @@
     </div>
   {:else if typeStr === 'boolean'}
     <label class="toggle">
-      <input type="checkbox" checked={boolValue} on:change={onBool} />
+      <input type="checkbox" checked={boolValue} onchange={onBool} />
       <span class="toggle-text">{boolValue ? 'On' : 'Off'}</span>
     </label>
   {:else if typeStr === 'integer' || typeStr === 'number'}
@@ -195,9 +201,9 @@
         spellcheck={false}
         class:invalid={!numTextValid}
         value={numText}
-        on:input={onNumberInput}
-        on:keydown={blockDecimalKey}
-        on:paste={blockDecimalPaste}
+        oninput={onNumberInput}
+        onkeydown={blockDecimalKey}
+        onpaste={blockDecimalPaste}
       />
       {#if unitLabel}
         <span class="unit-label">{unitLabel}</span>
@@ -209,7 +215,7 @@
       value={stringValue}
       minlength={schema.minLength}
       maxlength={schema.maxLength}
-      on:input={onTextInput}
+      oninput={onTextInput}
     />
   {/if}
 </div>
@@ -222,7 +228,6 @@
     margin-bottom: 0.85rem;
   }
   .field-label { font-weight: 500; }
-  .field-help { color: var(--fg-muted); font-size: 0.9em; }
 
   .option-group {
     display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.15rem;

@@ -4,10 +4,10 @@
   import { refreshUser } from '$lib/auth';
   import { goto } from '$app/navigation';
 
-  let devLoginAvailable = false;
-  let devUsername = 'dev';
-  let busy = false;
-  let error = '';
+  let devLoginAvailable = $state(false);
+  let devUsername = $state('dev');
+  let busy = $state(false);
+  let error = $state('');
 
   onMount(async () => {
     // Probe dev-login: only enabled when the backend has AMACA_DEV_LOGIN set.
@@ -49,7 +49,7 @@
     </p>
     <div class="row">
       <input bind:value={devUsername} placeholder="username" />
-      <button class="primary" on:click={doDevLogin} disabled={busy}>
+      <button class="primary" onclick={doDevLogin} disabled={busy}>
         {busy ? 'Signing in…' : 'Dev sign in'}
       </button>
     </div>

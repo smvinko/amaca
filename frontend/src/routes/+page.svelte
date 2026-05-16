@@ -4,8 +4,8 @@
   import { user } from '$lib/auth';
   import { api, type CodeOut } from '$lib/api';
 
-  let codes: CodeOut[] | null = null;
-  let error = '';
+  let codes = $state<CodeOut[] | null>(null);
+  let error = $state('');
 
   onMount(load);
 
@@ -20,8 +20,10 @@
   }
 
   // Re-load once the auth store resolves.
-  $: if ($user) load();
-  $: if ($user === null) goto('/login');
+  $effect(() => {
+    if ($user) load();
+    else if ($user === null) goto('/login');
+  });
 </script>
 
 <h2>Codes</h2>

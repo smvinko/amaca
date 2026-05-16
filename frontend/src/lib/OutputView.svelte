@@ -12,8 +12,13 @@
    * work directory (the runner enforces this server-side; ../ escape
    * attempts return 404).
    */
-  export let outputs: Record<string, unknown> | null | undefined;
-  export let jobId: number | null = null;
+  let {
+    outputs,
+    jobId = null
+  }: {
+    outputs: Record<string, unknown> | null | undefined;
+    jobId?: number | null;
+  } = $props();
 
   const IMAGE_EXT = /\.(png|jpe?g|gif|svg|webp)$/i;
   const FILE_EXT  = /\.(csv|tsv|txt|json|log|h5|hdf5|nc|parquet|pq)$/i;
@@ -41,9 +46,9 @@
     return Array.isArray(v) && v.every((x) => typeof x === 'number');
   }
 
-  $: cats = outputs ? categorise(outputs) : { images: [], files: [] };
+  const cats = $derived(outputs ? categorise(outputs) : { images: [], files: [] });
 
-  $: plot = (() => {
+  const plot = $derived.by(() => {
     if (!outputs) return null;
     const x = outputs.x, y = outputs.y;
     if (!isNumberArray(x) || !isNumberArray(y) || x.length !== y.length || x.length < 2) return null;
@@ -54,7 +59,7 @@
     const sy = (yy: number) => H - pad - ((yy - ymin) / (ymax - ymin || 1)) * (H - 2 * pad);
     const d = x.map((xi, i) => `${i === 0 ? 'M' : 'L'} ${sx(xi).toFixed(2)} ${sy(y[i]).toFixed(2)}`).join(' ');
     return { W, H, pad, d, xmin, xmax, ymin, ymax };
-  })();
+  });
 
   function humanKey(k: string): string {
     return k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());

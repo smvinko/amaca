@@ -1,17 +1,18 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
   import { api, type JobOut } from '$lib/api';
   import JobStatus from '$lib/JobStatus.svelte';
   import OutputView from '$lib/OutputView.svelte';
 
-  let job: JobOut | null = null;
-  let logLines: string[] = [];
-  let error = '';
+  let job = $state<JobOut | null>(null);
+  let logLines = $state<string[]>([]);
+  let error = $state('');
   let ws: WebSocket | null = null;
-  let cancelling = false;
+  let cancelling = $state(false);
 
-  $: jobId = Number($page.params.id);
+  const jobId = $derived(Number($page.params.id));
 
   onMount(async () => {
     try {
@@ -59,7 +60,7 @@
     finally { cancelling = false; }
   }
 
-  let deleting = false;
+  let deleting = $state(false);
   async function deleteJob() {
     if (!job) return;
     if (!confirm(`Delete job #${job.id} and its on-disk artifacts? This cannot be undone.`)) return;
@@ -98,9 +99,9 @@
     submitted {new Date(job.created_at).toLocaleString()} ·
     duration {dur(job.started_at, job.finished_at)}
     {#if !['succeeded', 'failed', 'cancelled'].includes(job.status)}
-      &nbsp;·&nbsp; <button on:click={cancel} disabled={cancelling}>{cancelling ? 'cancelling…' : 'cancel'}</button>
+      &nbsp;·&nbsp; <button onclick={cancel} disabled={cancelling}>{cancelling ? 'cancelling…' : 'cancel'}</button>
     {:else}
-      &nbsp;·&nbsp; <button on:click={deleteJob} disabled={deleting}>{deleting ? 'deleting…' : 'delete'}</button>
+      &nbsp;·&nbsp; <button onclick={deleteJob} disabled={deleting}>{deleting ? 'deleting…' : 'delete'}</button>
     {/if}
   </p>
 
