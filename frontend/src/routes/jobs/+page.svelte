@@ -5,6 +5,7 @@
 
   let jobs = $state<JobListItem[] | null>(null);
   let error = $state('');
+  let busyId = $state<number | null>(null);
 
   async function load() {
     try {
@@ -15,6 +16,24 @@
   }
 
   onMount(load);
+
+  const terminal = (s: string) =>
+    ['succeeded', 'failed', 'cancelled'].includes(s);
+
+  async function remove(job: JobListItem) {
+    // Same endpoint as the job page: cancel-if-live, delete-if-terminal.
+    const verb = terminal(job.status) ? 'Delete' : 'Cancel';
+    if (!confirm(`${verb} job #${job.id}? This cannot be undone.`)) return;
+    busyId = job.id;
+    try {
+      await api.cancelJob(job.id);
+      await load();
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      busyId = null;
+    }
+  }
 
   function fmt(ts: string | null) {
     if (!ts) return '—';
@@ -40,6 +59,7 @@
         <th>Status</th>
         <th>Submitted</th>
         <th>Finished</th>
+        <th></th>
       </tr>
     </thead>
     <tbody>
@@ -50,6 +70,17 @@
           <td><JobStatus status={job.status} /></td>
           <td class="muted">{fmt(job.created_at)}</td>
           <td class="muted">{fmt(job.finished_at)}</td>
+          <td class="actions">
+            <button
+              type="button"
+              onclick={() => remove(job)}
+              disabled={busyId === job.id}
+            >
+              {busyId === job.id
+                ? '…'
+                : terminal(job.status) ? 'delete' : 'cancel'}
+            </button>
+          </td>
         </tr>
       {/each}
     </tbody>
@@ -60,4 +91,6 @@
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
   th { font-weight: 500; color: var(--fg-muted); font-size: 0.85em; }
+  .actions { text-align: right; }
+  .actions button { font-size: 0.85em; padding: 0.2rem 0.6rem; }
 </style>

@@ -154,6 +154,9 @@ export interface JobOut {
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
+  // Live run progress (running jobs only; null otherwise). 0..1.
+  progress: number | null;
+  progress_message: string | null;
 }
 
 export interface JobLogLine { ts: string; line: string; }

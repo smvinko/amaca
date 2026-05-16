@@ -25,7 +25,9 @@ from .schemas import JobListItem, JobLogLine, JobOut, JobSubmit
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 
-def _to_out(job: models.Job) -> JobOut:
+def _to_out(
+    job: models.Job, progress: dict[str, Any] | None = None
+) -> JobOut:
     return JobOut(
         id=job.id,
         owner_id=job.owner_id,
@@ -38,6 +40,8 @@ def _to_out(job: models.Job) -> JobOut:
         created_at=job.created_at,
         started_at=job.started_at,
         finished_at=job.finished_at,
+        progress=progress.get("fraction") if progress else None,
+        progress_message=progress.get("message") if progress else None,
     )
 
 
@@ -104,8 +108,11 @@ async def list_jobs(
 
 
 @router.get("/{job_id}", response_model=JobOut)
-async def get_job(job_id: int, user: CurrentUser, db: DB) -> JobOut:
-    return _to_out(_ensure_visible(db.get(models.Job, job_id), user))
+async def get_job(
+    job_id: int, user: CurrentUser, db: DB, runner: Runner
+) -> JobOut:
+    job = _ensure_visible(db.get(models.Job, job_id), user)
+    return _to_out(job, runner.progress_of(job.id))
 
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)

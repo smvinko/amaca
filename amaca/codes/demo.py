@@ -78,7 +78,9 @@ class Demo(Code):
         ctx.log(f"demo: starting with {inputs.n_points} points, "
                 f"waveform={inputs.waveform!r}, sleep={inputs.sleep_s}s")
 
-        # Sleep in small slices so cancellation is responsive.
+        # Sleep in small slices so cancellation is responsive — and
+        # report progress each slice (also exercises the ctx.progress
+        # contract for the framework's tests).
         slept = 0.0
         slice_s = 0.05
         while slept < inputs.sleep_s:
@@ -88,6 +90,7 @@ class Demo(Code):
             chunk = min(slice_s, inputs.sleep_s - slept)
             time.sleep(chunk)
             slept += chunk
+            ctx.progress(slept / inputs.sleep_s, f"{slept:.2f}/{inputs.sleep_s:.2f} s")
 
         fn = _WAVEFORMS[inputs.waveform]
         xs = [i / (inputs.n_points - 1) * 2 * math.pi for i in range(inputs.n_points)]

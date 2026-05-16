@@ -12,8 +12,26 @@
   let error = $state('');
   let ws: WebSocket | null = null;
   let cancelling = $state(false);
+  let progress = $state<{ fraction: number; message: string } | null>(null);
+  // Ticks every second so elapsed time is live even when no progress
+  // event has arrived yet (so the page never looks frozen).
+  let nowMs = $state(Date.now());
+  let clock: ReturnType<typeof setInterval> | null = null;
 
   const jobId = $derived(Number($page.params.id));
+  const running = $derived(
+    !!job && !['succeeded', 'failed', 'cancelled'].includes(job.status)
+  );
+  // API timestamps are tz-naive UTC (SQLite drops tzinfo); Date()
+  // would read them as local time. Treat a missing offset as UTC so
+  // elapsed (vs the live local clock) is correct.
+  const tsMs = (s: string): number =>
+    Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : s + 'Z');
+  const elapsedS = $derived(
+    job?.started_at
+      ? Math.max(0, (nowMs - tsMs(job.started_at)) / 1000)
+      : null
+  );
 
   onMount(async () => {
     try {
@@ -27,6 +45,10 @@
       // Backfill any logs that arrived before we connected.
       const logs = await api.jobLogs(jobId);
       logLines = logs.map((row) => row.line);
+      // Seed the bar if the job is mid-run when the page loads.
+      if (job.progress != null) {
+        progress = { fraction: job.progress, message: job.progress_message ?? '' };
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
       return;
@@ -34,11 +56,13 @@
     // If the job is still live, subscribe to the stream for incremental updates.
     if (job && !['succeeded', 'failed', 'cancelled'].includes(job.status)) {
       connectWS();
+      clock = setInterval(() => { nowMs = Date.now(); }, 1000);
     }
   });
 
   onDestroy(() => {
     if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+    if (clock) clearInterval(clock);
   });
 
   function connectWS() {
@@ -48,11 +72,15 @@
       const event = JSON.parse(ev.data);
       if (event.type === 'log') {
         logLines = [...logLines, event.line];
+      } else if (event.type === 'progress') {
+        progress = { fraction: event.fraction, message: event.message ?? '' };
       } else if (event.type === 'status') {
         // Refetch the full job to pick up outputs/finished_at/error_text.
         try { job = await api.getJob(jobId); } catch { /* ignore */ }
-        if (['succeeded', 'failed', 'cancelled'].includes(event.status) && ws) {
-          ws.close();
+        if (['succeeded', 'failed', 'cancelled'].includes(event.status)) {
+          progress = null;
+          if (clock) { clearInterval(clock); clock = null; }
+          if (ws) ws.close();
         }
       }
     };
@@ -112,6 +140,24 @@
     {/if}
   </p>
 
+  {#if running}
+    <div class="progress">
+      {#if progress}
+        <div class="pbar">
+          <div class="pfill" style="width: {Math.round(progress.fraction * 100)}%"></div>
+        </div>
+        <p class="muted pmeta">
+          {Math.round(progress.fraction * 100)}%{#if progress.message} · {progress.message}{/if}{#if elapsedS != null} · {elapsedS.toFixed(0)} s elapsed{/if}
+        </p>
+      {:else}
+        <div class="pbar indeterminate"><div class="pfill-i"></div></div>
+        <p class="muted pmeta">
+          {job.status === 'queued' ? 'queued…' : 'running…'}{#if elapsedS != null} · {elapsedS.toFixed(0)} s elapsed{/if}
+        </p>
+      {/if}
+    </div>
+  {/if}
+
   {#if job.error_text}
     <div class="card danger">
       <strong>Error</strong>
@@ -139,3 +185,37 @@
     {/if}
   </div>
 {/if}
+
+<style>
+  .progress { margin: 0.25rem 0 0.75rem; }
+  .pbar {
+    height: 0.55rem;
+    border-radius: 999px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .pfill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 999px;
+    transition: width 0.35s ease;
+  }
+  .pmeta { margin: 0.3rem 0 0; font-size: 0.85em; font-family: var(--font-mono); }
+  /* Indeterminate: a sliding sliver until the first real fraction. */
+  .pbar.indeterminate { position: relative; }
+  .pfill-i {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 35%;
+    background: var(--accent);
+    border-radius: 999px;
+    animation: pslide 1.15s ease-in-out infinite;
+  }
+  @keyframes pslide {
+    0%   { left: -35%; }
+    100% { left: 100%; }
+  }
+</style>

@@ -63,6 +63,10 @@ class JobOut(BaseModel):
     created_at: datetime
     started_at: datetime | None = None
     finished_at: datetime | None = None
+    # Live run progress (running jobs only; null otherwise). `progress`
+    # is 0..1; `progress_message` an optional short status line.
+    progress: float | None = None
+    progress_message: str | None = None
 
 
 class JobLogLine(BaseModel):

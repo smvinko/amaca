@@ -45,6 +45,10 @@ class JobRunner:
         self._tasks: dict[int, asyncio.Task[None]] = {}
         self._cancel_flags: dict[int, bool] = {}
         self._subscribers: dict[int, list[asyncio.Queue[dict[str, Any]]]] = {}
+        # Latest progress per running job, in-memory only (cleared when
+        # the job finalises). Lets a page (re)loaded mid-run show the
+        # current bar without a DB column / migration.
+        self._progress: dict[int, dict[str, Any]] = {}
 
     # ------------------------------------------------------------------ public
 
@@ -74,6 +78,14 @@ class JobRunner:
     def unsubscribe(self, job_id: int, q: asyncio.Queue[dict[str, Any]]) -> None:
         if q in self._subscribers.get(job_id, []):
             self._subscribers[job_id].remove(q)
+
+    def progress_of(self, job_id: int) -> dict[str, Any] | None:
+        """Latest reported progress for a running job, or None.
+
+        Returns ``{"fraction": float, "message": str}``. Cleared once
+        the job finalises (progress is meaningless for a done job).
+        """
+        return self._progress.get(job_id)
 
     async def wait(self, job_id: int) -> None:
         """For tests / shutdown: await the task if any."""
@@ -151,9 +163,20 @@ class JobRunner:
         def check_cancelled() -> bool:
             return self._cancel_flags.get(job_id, False)
 
+        def progress(fraction: float, message: str = "") -> None:
+            # Called from the adapter's worker thread (or a helper
+            # thread it spawns). In-memory + broadcast only — no DB
+            # write, so it's cheap to call at high frequency.
+            frac = 0.0 if fraction < 0 else 1.0 if fraction > 1 else float(fraction)
+            self._progress[job_id] = {"fraction": frac, "message": message}
+            self._broadcast(
+                job_id,
+                {"type": "progress", "fraction": frac, "message": message},
+            )
+
         ctx = JobContext(
             job_id=job_id, user_id=owner_id, work_dir=job_dir,
-            log=log, check_cancelled=check_cancelled,
+            log=log, check_cancelled=check_cancelled, progress=progress,
         )
 
         # ---- dispatch the adapter ----
@@ -191,6 +214,9 @@ class JobRunner:
             if outputs_json is not None:
                 job.outputs_json = outputs_json
             db.commit()
+        # Progress is meaningless once terminal — drop it so a late
+        # page load doesn't show a stale bar.
+        self._progress.pop(job_id, None)
         event: dict[str, Any] = {"type": "status", "status": status.value}
         if error is not None:
             event["error"] = error

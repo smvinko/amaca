@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
@@ -99,6 +100,37 @@ async def test_runner_broadcasts_log_and_status_events(
     statuses = [e["status"] for e in events if e["type"] == "status"]
     assert "running" in statuses
     assert "succeeded" in statuses
+
+
+async def test_runner_broadcasts_progress_and_clears(
+    runner: JobRunner, db: Session, user: models.User
+) -> None:
+    job = _make_job(db, user, inputs=DemoInputs(sleep_s=0.3).model_dump())
+    sub = runner.subscribe(job.id)
+    await runner.submit(job.id)
+    await runner.wait(job.id)
+
+    events: list[dict] = []
+    while not sub.empty():
+        events.append(sub.get_nowait())
+    prog = [e for e in events if e["type"] == "progress"]
+    assert prog, "no progress events broadcast"
+    assert all(0.0 <= e["fraction"] <= 1.0 for e in prog)
+    assert prog[-1]["fraction"] == pytest.approx(1.0)
+    assert all(isinstance(e["message"], str) for e in prog)
+    # Progress is dropped once the job finalises.
+    assert runner.progress_of(job.id) is None
+
+
+def test_jobcontext_progress_defaults_to_noop(tmp_path: Path) -> None:
+    """The contract stays back-compatible: a context built without a
+    progress sink still has a safe, callable .progress."""
+    from amaca.core import JobContext
+    ctx = JobContext(
+        job_id=1, user_id=1, work_dir=tmp_path,
+        log=lambda _l: None, check_cancelled=lambda: False,
+    )
+    ctx.progress(0.5, "halfway")  # must not raise
 
 
 async def test_runner_double_submit_is_idempotent(

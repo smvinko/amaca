@@ -1,10 +1,19 @@
 """Cross-cutting types for amaca's core."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Callable
+
+
+def _noop_progress(fraction: float, message: str = "") -> None:
+    """Default ``JobContext.progress`` — does nothing.
+
+    Lets adapters (and tests) construct a context without a progress
+    sink, and means calling ``ctx.progress(...)`` is always safe even
+    when nothing is listening.
+    """
 
 
 class JobStatus(str, Enum):
@@ -30,9 +39,14 @@ class JobContext:
     - ``check_cancelled()`` — return True if the user has asked to cancel;
       the adapter is expected to poll this in any loop longer than a few
       seconds and raise/return cleanly when True.
+    - ``progress(fraction, message="")`` — report run progress;
+      ``fraction`` is 0..1 (clamped), ``message`` an optional short
+      status. Streamed live to the job page and surfaced as a progress
+      bar. Optional: adapters that don't call it just don't get a bar.
     """
     job_id: int
     user_id: int
     work_dir: Path
     log: Callable[[str], None]
     check_cancelled: Callable[[], bool]
+    progress: Callable[[float, str], None] = field(default=_noop_progress)
