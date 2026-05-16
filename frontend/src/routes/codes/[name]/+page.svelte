@@ -86,24 +86,39 @@
     return got === want;
   }
 
-  const groups = $derived.by(() => {
+  // A group renders as: `fields` (flow, full-width, declared order)
+  // followed by `columns` (an explicit N-column block). A field
+  // declared in `columns` is laid out there; everything else flows.
+  type Group = {
+    title: string | null;
+    fields: string[];
+    columns: string[][];
+  };
+
+  const groups = $derived.by((): Group[] => {
     if (!code) return [];
     const props = code.input_schema.properties ?? {};
     const declared = code.input_schema['x-input-groups'] ?? [];
     const seen = new Set<string>();
-    const out: { title: string | null; fields: string[] }[] = [];
+    const out: Group[] = [];
     // values is read inside fieldVisible — referencing it here makes
     // Svelte's reactivity rerun when the user toggles a gating field.
     void values;
+    const visible = (f: string) => f in props && fieldVisible(f);
     for (const g of declared) {
-      const fields = g.fields.filter((f) => f in props && fieldVisible(f));
-      if (fields.length === 0) continue;
+      const colDecl = g.columns ?? [];
+      const inColumn = new Set(colDecl.flat());
+      const fields = g.fields.filter((f) => !inColumn.has(f) && visible(f));
+      const columns = colDecl
+        .map((col) => col.filter(visible))
+        .filter((col) => col.length > 0);
+      if (fields.length === 0 && columns.length === 0) continue;
       g.fields.forEach((f) => seen.add(f));   // mark gated-but-declared as "claimed"
-      out.push({ title: g.title, fields });
+      out.push({ title: g.title, fields, columns });
     }
     const leftover = Object.keys(props).filter((f) => !seen.has(f) && fieldVisible(f));
     if (leftover.length > 0) {
-      out.push({ title: declared.length === 0 ? null : 'Other', fields: leftover });
+      out.push({ title: declared.length === 0 ? null : 'Other', fields: leftover, columns: [] });
     }
     return out;
   });
@@ -138,24 +153,44 @@
   <h2>{code.title}</h2>
   <p class="muted">{code.name} · v{code.version}</p>
 
+  {#snippet fieldCtl(fieldName: string)}
+    {@const fieldSchema = code?.input_schema.properties?.[fieldName]}
+    {#if fieldSchema}
+      <FormField
+        name={fieldName}
+        schema={fieldSchema}
+        bind:value={values[fieldName]}
+      />
+    {/if}
+  {/snippet}
+
   <div class="form">
     {#each groups as group}
       <section class="group">
         {#if group.title}
           <h3 class="group-title">{group.title}</h3>
         {/if}
-        <div class="group-fields">
-          {#each group.fields as fieldName}
-            {@const fieldSchema = code.input_schema.properties?.[fieldName]}
-            {#if fieldSchema}
-              <FormField
-                name={fieldName}
-                schema={fieldSchema}
-                bind:value={values[fieldName]}
-              />
-            {/if}
-          {/each}
-        </div>
+        {#if group.fields.length > 0}
+          <div class="group-fields">
+            {#each group.fields as fieldName}
+              {@render fieldCtl(fieldName)}
+            {/each}
+          </div>
+        {/if}
+        {#if group.columns.length > 0}
+          <div
+            class="group-columns"
+            style="grid-template-columns: repeat({group.columns.length}, minmax(0, 1fr))"
+          >
+            {#each group.columns as col}
+              <div class="group-col">
+                {#each col as fieldName}
+                  {@render fieldCtl(fieldName)}
+                {/each}
+              </div>
+            {/each}
+          </div>
+        {/if}
       </section>
     {/each}
 
@@ -202,6 +237,21 @@
      onto another line at narrow widths instead of squashing. */
   .group-fields > :global(.field) {
     flex: 1 1 14rem;
+    margin-bottom: 0.6rem;
+  }
+  /* Explicit multi-column block (x-input-groups[].columns). Sits below
+     any full-width flow fields in the same group. */
+  .group-columns {
+    display: grid;
+    gap: 0.1rem 1.5rem;
+    margin-top: 0.35rem;
+  }
+  .group-col {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .group-col > :global(.field) {
     margin-bottom: 0.6rem;
   }
 </style>

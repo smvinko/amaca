@@ -60,8 +60,11 @@ export interface JsonSchema {
   required?: string[];
   // amaca custom: UI form grouping. If present, the form renders each
   // group as a labelled section; any field absent from every group
-  // falls into an "Other" section at the end.
-  'x-input-groups'?: { title: string; fields: string[] }[];
+  // falls into an "Other" section at the end. `columns`, when present,
+  // is an explicit multi-column layout: each inner array is one column
+  // (top-to-bottom). Group fields not listed in any column render
+  // full-width, in declared order, before the column block.
+  'x-input-groups'?: { title: string; fields: string[]; columns?: string[][] }[];
   [k: string]: unknown;
 }
 
@@ -84,6 +87,10 @@ export interface JsonSchemaProperty {
   'x-display-unit'?: { factor: number; label: string };
   // amaca custom: visibility gate driven by another field's value.
   'x-show-when'?: { field: string; equals: unknown };
+  // amaca custom: render this field with a richer named widget instead
+  // of the type-default control (e.g. 'periodic-table' for an enum of
+  // element symbols).
+  'x-widget'?: string;
   [k: string]: unknown;
 }
 

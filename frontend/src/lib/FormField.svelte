@@ -13,6 +13,7 @@
    * stays in the native unit (the input × factor).
    */
   import type { JsonSchemaProperty } from './api';
+  import PeriodicTable from './PeriodicTable.svelte';
 
   let {
     name,
@@ -48,6 +49,7 @@
   }
 
   const options = $derived(enumOptions(schema));
+  const widget = $derived(schema['x-widget']);
   const typeStr = $derived((schema.type ?? '').toString());
   const rawMin = $derived(
     (typeof schema.minimum === 'number' ? schema.minimum :
@@ -173,7 +175,9 @@
 <div class="field">
   <span class="field-label">{schema.title ?? name}</span>
 
-  {#if options}
+  {#if options && widget === 'periodic-table'}
+    <PeriodicTable {options} bind:value />
+  {:else if options}
     <div class="option-group" role="radiogroup">
       {#each options as opt}
         <button
