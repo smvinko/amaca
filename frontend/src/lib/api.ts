@@ -79,6 +79,21 @@ export interface JsonSchema {
       y_label?: string;
     };
   }[];
+  // amaca custom: native result figures (output schema). Each entry is
+  // rendered as an inline-SVG figure, one under the other, from numeric
+  // fields in the job's `outputs`. `series` is explicit lines (optional
+  // dual y-axis via axis:'left'|'right'); `series_from` instead draws
+  // one line per entry of a dict-valued output field.
+  'x-output-plots'?: {
+    kind: string;
+    title?: string;
+    x: string;
+    x_label?: string;
+    y_label?: string;
+    series?: { y: string; label?: string; axis?: 'left' | 'right' }[];
+    series_from?: string;
+    series_label?: string;
+  }[];
   [k: string]: unknown;
 }
 

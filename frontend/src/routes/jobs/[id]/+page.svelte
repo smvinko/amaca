@@ -2,11 +2,12 @@
   import { onMount, onDestroy } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { api, type JobOut } from '$lib/api';
+  import { api, type JobOut, type JsonSchema } from '$lib/api';
   import JobStatus from '$lib/JobStatus.svelte';
   import OutputView from '$lib/OutputView.svelte';
 
   let job = $state<JobOut | null>(null);
+  let outputSchema = $state<JsonSchema | null>(null);
   let logLines = $state<string[]>([]);
   let error = $state('');
   let ws: WebSocket | null = null;
@@ -17,6 +18,12 @@
   onMount(async () => {
     try {
       job = await api.getJob(jobId);
+      // Best-effort: the code's output schema carries x-output-plots
+      // (native result figures). A failure here just falls back to the
+      // legacy renderer — never blocks the job view.
+      try {
+        outputSchema = (await api.getCode(job.code_name)).output_schema;
+      } catch { /* code may be unregistered; ignore */ }
       // Backfill any logs that arrived before we connected.
       const logs = await api.jobLogs(jobId);
       logLines = logs.map((row) => row.line);
@@ -114,7 +121,7 @@
 
   <h3>Outputs</h3>
   <div class="card">
-    <OutputView outputs={job.outputs} jobId={job.id} />
+    <OutputView outputs={job.outputs} jobId={job.id} {outputSchema} />
   </div>
 
   <h3>Inputs</h3>

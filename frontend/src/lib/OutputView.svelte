@@ -12,12 +12,20 @@
    * work directory (the runner enforces this server-side; ../ escape
    * attempts return 404).
    */
+  import type { JsonSchema } from './api';
+  import ResultPlots from './ResultPlots.svelte';
+
   let {
     outputs,
-    jobId = null
+    jobId = null,
+    outputSchema = null
   }: {
     outputs: Record<string, unknown> | null | undefined;
     jobId?: number | null;
+    // The code's output schema. If it carries `x-output-plots`, native
+    // figures are rendered and image artifacts move to the download
+    // list (instead of the legacy inline <img> / x-y auto-plot).
+    outputSchema?: JsonSchema | null;
   } = $props();
 
   const IMAGE_EXT = /\.(png|jpe?g|gif|svg|webp)$/i;
@@ -48,6 +56,14 @@
 
   const cats = $derived(outputs ? categorise(outputs) : { images: [], files: [] });
 
+  // Native result figures from the output schema (generic primitive).
+  const outputPlots = $derived(outputSchema?.['x-output-plots']);
+  const nativeMode = $derived(!!(outputPlots && outputPlots.length));
+  // In native mode the static PNGs become downloads alongside the CSV.
+  const downloads = $derived(
+    nativeMode ? [...cats.files, ...cats.images] : cats.files
+  );
+
   const plot = $derived.by(() => {
     if (!outputs) return null;
     const x = outputs.x, y = outputs.y;
@@ -67,7 +83,9 @@
 </script>
 
 {#if outputs}
-  {#if plot}
+  {#if nativeMode && outputPlots}
+    <ResultPlots plots={outputPlots} {outputs} />
+  {:else if plot}
     <div class="plot">
       <svg viewBox="0 0 {plot.W} {plot.H}" width="100%" preserveAspectRatio="xMidYMid meet">
         <rect x="0.5" y="0.5" width={plot.W - 1} height={plot.H - 1}
@@ -86,7 +104,7 @@
     </div>
   {/if}
 
-  {#if cats.images.length > 0}
+  {#if !nativeMode && cats.images.length > 0}
     <div class="images">
       {#each cats.images as img}
         <figure class="image-card">
@@ -99,11 +117,11 @@
     </div>
   {/if}
 
-  {#if cats.files.length > 0}
+  {#if downloads.length > 0}
     <div class="files">
       <h4 class="muted" style="margin: 0.75rem 0 0.25rem; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em;">Files</h4>
       <ul>
-        {#each cats.files as f}
+        {#each downloads as f}
           <li>
             <a href={fileUrl(f.path)} download>{f.path}</a>
             <span class="muted"> ({humanKey(f.key)})</span>
