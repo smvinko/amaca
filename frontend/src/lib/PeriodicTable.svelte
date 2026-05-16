@@ -11,7 +11,7 @@
    * the Z=1–36 map falls back to a plain button row beneath the table,
    * so a mis-tagged field degrades gracefully instead of vanishing.
    */
-  type Opt = { value: unknown; label: string };
+  type Opt = { value: unknown; label: string; disabled?: boolean };
 
   let {
     options,
@@ -56,7 +56,7 @@
   const allowed = $derived(
     new Map(
       options
-        .filter((o) => typeof o.value === 'string')
+        .filter((o) => typeof o.value === 'string' && !o.disabled)
         .map((o) => [o.value as string, o])
     )
   );

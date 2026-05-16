@@ -81,7 +81,9 @@ export interface JsonSchemaProperty {
   maxLength?: number;
   enum?: unknown[];
   anyOf?: { type?: string; const?: unknown }[];
-  oneOf?: { const?: unknown; title?: string }[];
+  // `disabled` options are shown but not selectable (rendered inert /
+  // greyed, same as an out-of-policy periodic-table element).
+  oneOf?: { const?: unknown; title?: string; disabled?: boolean }[];
   // amaca custom: display-unit override (user types in `label` units;
   // bound value = input * factor in the field's native unit).
   'x-display-unit'?: { factor: number; label: string };

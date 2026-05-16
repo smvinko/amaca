@@ -27,22 +27,25 @@
 
   function enumOptions(
     s: JsonSchemaProperty
-  ): { value: unknown; label: string }[] | null {
+  ): { value: unknown; label: string; disabled: boolean }[] | null {
     if (Array.isArray(s.oneOf) && s.oneOf.every((b) => b && 'const' in b)) {
       return s.oneOf.map((b) => ({
         value: b.const,
-        label: b.title ?? String(b.const)
+        label: b.title ?? String(b.const),
+        disabled: b.disabled === true
       }));
     }
     if (Array.isArray(s.enum)) {
-      return s.enum.map((v) => ({ value: v, label: String(v) }));
+      return s.enum.map((v) => ({ value: v, label: String(v), disabled: false }));
     }
     if (Array.isArray(s.anyOf)) {
       const consts = s.anyOf.filter(
         (b) => b && typeof b === 'object' && 'const' in b
       );
       if (consts.length === s.anyOf.length) {
-        return consts.map((b) => ({ value: b.const, label: String(b.const) }));
+        return consts.map((b) => ({
+          value: b.const, label: String(b.const), disabled: false
+        }));
       }
     }
     return null;
@@ -184,7 +187,9 @@
           type="button"
           class="option-button"
           class:active={opt.value === value}
+          disabled={opt.disabled}
           aria-pressed={opt.value === value}
+          title={opt.disabled ? `${opt.label} — not available for this code` : opt.label}
           onclick={() => pickOption(opt.value)}
         >
           {opt.label}
@@ -248,9 +253,16 @@
     font-family: inherit;
     transition: background 0.1s, border-color 0.1s, color 0.1s;
   }
-  .option-button:hover:not(.active) {
+  .option-button:not(:disabled):hover:not(.active) {
     border-color: var(--accent);
     color: var(--accent);
+  }
+  /* Shown-but-not-selectable option (policy-disabled). Same inert
+     treatment as an out-of-policy periodic-table element. */
+  .option-button:disabled {
+    cursor: default;
+    opacity: 0.32;
+    background: var(--bg);
   }
   .option-button.active {
     background: var(--accent);
