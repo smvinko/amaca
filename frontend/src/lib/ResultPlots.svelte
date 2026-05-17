@@ -11,6 +11,10 @@
    *     y-axis (e.g. Tₑ left, nₑ right).
    *   - `series_from`: a dict-valued output field → one line per entry
    *     (e.g. population per charge state), label `${series_label}${key}`.
+   *
+   * A figure with a single line shows no legend (it'd be redundant).
+   * `y_scale_toggle: true` adds a little linear / log₁₀ switch beneath
+   * the figure (per-figure, applies to both y-axes when dual).
    */
   type Spec = {
     kind: string;
@@ -21,6 +25,7 @@
     series?: { y: string; label?: string; axis?: 'left' | 'right' }[];
     series_from?: string;
     series_label?: string;
+    y_scale_toggle?: boolean;
   };
 
   let {
@@ -35,6 +40,11 @@
     'var(--accent)', '#e0567a', '#4fb286', '#d8913b', '#7d6cd6',
     '#3aa6c4', '#c45ab3', '#9aa23b', '#d06a4e', '#5a8fd6'
   ];
+
+  // Per-figure y-axis scale: false = linear, true = log₁₀. Keyed by
+  // the figure id; mutating it re-derives that figure.
+  let yLog = $state<Record<string, boolean>>({});
+  const figId = (s: Spec): string => s.title ?? s.x;
 
   const numArr = (v: unknown): number[] | null =>
     Array.isArray(v) && v.every((n) => typeof n === 'number')
@@ -53,8 +63,6 @@
   /**
    * "Nice" axis ticks: round step from the 1 / 2 / 5 × 10ⁿ family so
    * labels land on meaningful values, count adapts to the range.
-   * Returns the in-range tick values (rounded to the step to kill
-   * float fuzz).
    */
   function niceTicks(lo: number, hi: number, target = 6): number[] {
     if (!isFinite(lo) || !isFinite(hi) || hi <= lo) return [lo];
@@ -70,9 +78,25 @@
     return ticks;
   }
 
-  type Line = { label: string; ys: number[]; color: string; right: boolean };
+  /** Decade ticks (powers of ten) across an exponent range, stepped
+   *  so the count stays readable even over many decades. */
+  function logTicks(elo: number, ehi: number): number[] {
+    const step = Math.max(1, Math.ceil((ehi - elo) / 6));
+    const ts: number[] = [];
+    for (let e = elo; e <= ehi + 1e-9 && ts.length < 14; e += step) {
+      ts.push(Math.pow(10, e));
+    }
+    const top = Math.pow(10, ehi);
+    if (ts[ts.length - 1] !== top) ts.push(top);
+    return ts;
+  }
 
-  function build(spec: Spec) {
+  type Line = { label: string; ys: number[]; color: string; right: boolean };
+  type Range =
+    | { log: false; lo: number; hi: number }
+    | { log: true; lo: number; hi: number; elo: number; ehi: number };
+
+  function build(spec: Spec, useLog: boolean) {
     const xs = numArr(outputs[spec.x]);
     if (!xs || xs.length < 2) return null;
 
@@ -111,20 +135,42 @@
     if (lines.length === 0) return null;
 
     const W = 660, H = 260, padL = 56, padR = 56, padT = 12, padB = 38;
+    const plotH = H - padT - padB;
     const xmin = Math.min(...xs), xmax = Math.max(...xs);
-    const rng = (sel: (l: Line) => boolean) => {
-      const vals = lines.filter(sel).flatMap((l) => l.ys);
+
+    const rng = (sel: (l: Line) => boolean): Range | null => {
+      const vals = lines.filter(sel).flatMap((l) => l.ys).filter(Number.isFinite);
       if (vals.length === 0) return null;
+      if (useLog) {
+        const pos = vals.filter((v) => v > 0);
+        if (pos.length) {
+          let elo = Math.floor(Math.log10(Math.min(...pos)));
+          let ehi = Math.ceil(Math.log10(Math.max(...pos)));
+          if (elo === ehi) { elo -= 1; ehi += 1; }
+          return { log: true, elo, ehi, lo: 10 ** elo, hi: 10 ** ehi };
+        }
+        // no positive data on this axis → fall back to linear
+      }
       let lo = Math.min(...vals), hi = Math.max(...vals);
       if (lo === hi) { lo -= 1; hi += 1; }
-      return { lo, hi };
+      return { log: false, lo, hi };
     };
     const left = rng((l) => !l.right);
     const right = rng((l) => l.right);
     const sx = (x: number) =>
       padL + ((x - xmin) / (xmax - xmin || 1)) * (W - padL - padR);
-    const syOf = (r: { lo: number; hi: number }) => (y: number) =>
-      H - padB - ((y - r.lo) / (r.hi - r.lo || 1)) * (H - padT - padB);
+    const syOf = (r: Range) => (y: number) => {
+      if (r.log) {
+        const ly = Math.log10(Math.max(y, r.lo));
+        return H - padB - ((ly - r.elo) / ((r.ehi - r.elo) || 1)) * plotH;
+      }
+      return H - padB - ((y - r.lo) / ((r.hi - r.lo) || 1)) * plotH;
+    };
+    const axTicks = (r: Range) =>
+      (r.log
+        ? logTicks(r.elo, r.ehi)
+        : niceTicks(r.lo, r.hi, 5)
+      ).map((v) => ({ v, py: syOf(r)(v) }));
 
     const paths = lines.map((l) => {
       const r = l.right ? right : left;
@@ -141,27 +187,29 @@
     }).filter(Boolean) as { d: string; color: string; label: string; right: boolean }[];
 
     const xticks = niceTicks(xmin, xmax, 7).map((v) => ({ v, px: sx(v) }));
-    const lyticks = left
-      ? niceTicks(left.lo, left.hi, 5).map((v) => ({ v, py: syOf(left)(v) }))
-      : [];
-    const ryticks = right
-      ? niceTicks(right.lo, right.hi, 5).map((v) => ({ v, py: syOf(right)(v) }))
-      : [];
+    const lyticks = left ? axTicks(left) : [];
+    const ryticks = right ? axTicks(right) : [];
 
     return {
       W, H, padL, padR, padT, padB,
       xmin, xmax, left, right, paths,
       xticks, lyticks, ryticks,
-      manyLines: lines.length > 6
+      manyLines: lines.length > 6,
+      showLegend: paths.length > 1
     };
   }
 
   const figures = $derived(
-    plots.map((spec) => ({ spec, m: build(spec) })).filter((f) => f.m)
+    plots
+      .map((spec) => {
+        const id = figId(spec);
+        return { spec, id, m: build(spec, !!yLog[id]) };
+      })
+      .filter((f) => f.m)
   );
 </script>
 
-{#each figures as { spec, m } (spec.title ?? spec.x)}
+{#each figures as { spec, id, m } (id)}
   {#if m}
     <figure class="rp">
       {#if spec.title}<figcaption class="rp-title">{spec.title}</figcaption>{/if}
@@ -198,13 +246,27 @@
           <text x={m.W - m.padR + 7} y={t.py + 3} class="rp-tick">{fmt(t.v)}</text>
         {/each}
       </svg>
-      <div class="rp-legend" class:compact={m.manyLines}>
-        {#each m.paths as p}
-          <span class="rp-key">
-            <span class="rp-swatch" style="background:{p.color}"></span>{p.label}{#if p.right} <span class="rp-ax">(right)</span>{/if}
-          </span>
-        {/each}
-      </div>
+      {#if m.showLegend}
+        <div class="rp-legend" class:compact={m.manyLines}>
+          {#each m.paths as p}
+            <span class="rp-key">
+              <span class="rp-swatch" style="background:{p.color}"></span>{p.label}{#if p.right} <span class="rp-ax">(right)</span>{/if}
+            </span>
+          {/each}
+        </div>
+      {/if}
+      {#if spec.y_scale_toggle}
+        <div class="rp-scale">
+          <button
+            type="button"
+            class="rp-scale-btn"
+            aria-pressed={!!yLog[id]}
+            onclick={() => (yLog[id] = !yLog[id])}
+          >
+            y-axis: {yLog[id] ? 'log₁₀' : 'linear'}
+          </button>
+        </div>
+      {/if}
     </figure>
   {/if}
 {/each}
@@ -258,4 +320,10 @@
     width: 0.7rem; height: 0.2rem; border-radius: 1px; display: inline-block;
   }
   .rp-ax { opacity: 0.7; }
+  .rp-scale { margin-top: 0.4rem; }
+  .rp-scale-btn {
+    font-size: 0.78em;
+    padding: 0.15rem 0.55rem;
+    border-radius: 4px;
+  }
 </style>
