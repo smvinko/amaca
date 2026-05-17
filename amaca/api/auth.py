@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import zlib
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
@@ -41,9 +42,14 @@ async def dev_login(payload: DevLoginIn, request: Request, db: DB) -> models.Use
     """
     if not _dev_login_enabled():
         raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+    # Stable, deterministic id per username. Built-in hash() is salted
+    # per process (PYTHONHASHSEED), so it minted a NEW user — and
+    # stranded that user's jobs — on every server restart. crc32 is
+    # stable across processes/machines; negative keeps dev ids out of
+    # the positive GitHub-id space so they can never collide.
     user = upsert_user_from_github(
         db,
-        github_id=-abs(hash(payload.username)) & 0x7FFFFFFF,
+        github_id=-(zlib.crc32(payload.username.encode()) + 1),
         github_username=payload.username,
         email=f"{payload.username}@dev.amaca.local",
     )
