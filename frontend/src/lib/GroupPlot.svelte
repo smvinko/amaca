@@ -75,16 +75,16 @@
       .map((x, i) => `${i === 0 ? 'M' : 'L'} ${sx(x).toFixed(2)} ${sy(ys[i]).toFixed(2)}`)
       .join(' ');
     const centerX = t0 >= 0 && t0 <= tmax ? sx(t0) : null;
-    // Evenly spaced ticks; labels via the shared exponential fmt().
-    const NX = 4, NY = 4;
+    // X ticks in femtoseconds (the form value is seconds) — plain
+    // numbers read far cleaner than 4e-14 s.
+    const FS = 1e15;
+    const NX = 4;
     const xticks = Array.from({ length: NX + 1 }, (_, i) => {
-      const v = (i / NX) * tmax;
-      return { px: sx(v), label: fmt(v) };
+      const ts = (i / NX) * tmax; // seconds
+      return { px: sx(ts), label: String(Number((ts * FS).toPrecision(3))) };
     });
-    const yticks = Array.from({ length: NY + 1 }, (_, j) => {
-      const v = (j / NY) * ymax;
-      return { py: sy(v), label: fmt(v) };
-    });
+    // Y axis: just the peak intensity, no other ticks.
+    const yticks = [{ py: sy(ymax), label: fmt(ymax) }];
     return {
       W, H, padL, padR, padT, padB, d, centerX, tmax, ymax,
       xticks, yticks,
@@ -106,11 +106,11 @@
       role="img"
       aria-label={plot.title ?? 'preview plot'}
     >
-      <!-- y grid + tick labels -->
+      <!-- y axis: peak intensity only (no other ticks/gridlines) -->
       {#each model.yticks as t}
         <line
-          x1={model.axisX0} y1={t.py} x2={model.axisX1} y2={t.py}
-          stroke="var(--border)" stroke-opacity="0.4"
+          x1={model.axisX0 - 4} y1={t.py} x2={model.axisX0} y2={t.py}
+          stroke="var(--fg-muted)"
         />
         <text
           x={model.axisX0 - 8} y={t.py + 3}
@@ -158,9 +158,6 @@
         transform="rotate(-90 14 {(model.axisY1 + model.axisY0) / 2})"
       >{plot.y_label ?? 'y'}</text>
     </svg>
-    <p class="gp-cap muted">
-      peak {fmt(model.ymax)}{plot.y_label ? ` ${plot.y_label}` : ''}
-    </p>
   {:else}
     <p class="muted gp-empty">Enter valid pulse parameters to preview the shape.</p>
   {/if}
@@ -190,11 +187,6 @@
     letter-spacing: 0.05em;
     text-transform: uppercase;
     color: var(--fg-muted);
-  }
-  .gp-cap {
-    margin: 0.3rem 0 0;
-    font-size: 0.85em;
-    font-family: var(--font-mono);
   }
   .gp-empty {
     margin: 0;
