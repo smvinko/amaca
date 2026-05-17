@@ -163,8 +163,8 @@
     return true;
   });
 
-  function onBool(ev: Event) {
-    value = (ev.target as HTMLInputElement).checked;
+  function toggleBool() {
+    value = !boolValue;
   }
 
   function pickOption(v: unknown) {
@@ -197,10 +197,19 @@
       {/each}
     </div>
   {:else if typeStr === 'boolean'}
-    <label class="toggle">
-      <input type="checkbox" checked={boolValue} onchange={onBool} />
-      <span class="toggle-text">{boolValue ? 'On' : 'Off'}</span>
-    </label>
+    <!-- A single toggle button (Off ⇄ On), styled like the option
+         groups — clearer than a bare checkbox. -->
+    <div class="option-group" role="group">
+      <button
+        type="button"
+        class="option-button"
+        class:active={boolValue}
+        aria-pressed={boolValue}
+        onclick={toggleBool}
+      >
+        {boolValue ? 'On' : 'Off'}
+      </button>
+    </div>
   {:else if typeStr === 'integer' || typeStr === 'number'}
     <div class="num-row">
       <input
@@ -270,16 +279,6 @@
     border-color: var(--accent);
     font-weight: 500;
   }
-
-  .toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-    user-select: none;
-  }
-  .toggle input { width: 1.1rem; height: 1.1rem; }
-  .toggle-text { font-size: 0.95em; }
 
   .num-row {
     display: inline-flex;
