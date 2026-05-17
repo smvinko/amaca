@@ -24,7 +24,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from amaca.core import JobContext, JobStatus, get
+from amaca.core import (
+    JobContext,
+    JobStatus,
+    cores_per_job,
+    get,
+    max_concurrent_jobs,
+)
 from amaca.db import models
 
 logger = logging.getLogger(__name__)
@@ -37,10 +43,26 @@ def _now() -> datetime:
 class JobRunner:
     """Maintains the live tasks for an in-process worker."""
 
-    def __init__(self, SessionLocal: sessionmaker[Session], data_dir: Path) -> None:
+    def __init__(
+        self,
+        SessionLocal: sessionmaker[Session],
+        data_dir: Path,
+        *,
+        max_concurrent: int | None = None,
+    ) -> None:
         self._SessionLocal = SessionLocal
         self._data_dir = data_dir
         self._data_dir.mkdir(parents=True, exist_ok=True)
+
+        # Simple concurrency cap: at most N adapters run at once; the
+        # rest sit in QUEUED until a slot frees (resource policy lives
+        # in amaca.core.resources, not in any adapter). A future
+        # core-aware scheduler can replace this semaphore with
+        # admission on the summed per-job cpu_budget.
+        self._max_concurrent = (
+            max_concurrent if max_concurrent is not None else max_concurrent_jobs()
+        )
+        self._sem = asyncio.Semaphore(self._max_concurrent)
 
         self._tasks: dict[int, asyncio.Task[None]] = {}
         self._cancel_flags: dict[int, bool] = {}
@@ -126,6 +148,22 @@ class JobRunner:
                 logger.warning("subscriber queue full for job %d; dropping event", job_id)
 
     async def _run(self, job_id: int) -> None:
+        """Gate dispatch on the concurrency cap.
+
+        While awaiting a slot the task is alive but the job stays
+        QUEUED (no RUNNING transition yet) — so the UI shows it queued
+        and ``request_cancel`` still works (it sets the flag on the
+        live task). A job cancelled *while queued* is finalised
+        CANCELLED here without ever starting the adapter.
+        """
+        async with self._sem:
+            if self._cancel_flags.get(job_id, False):
+                self._cancel_flags.pop(job_id, None)
+                self._finalise(job_id, JobStatus.CANCELLED)
+                return
+            await self._dispatch(job_id)
+
+    async def _dispatch(self, job_id: int) -> None:
         # ---- load + transition to RUNNING ----
         try:
             with self._session() as db:
@@ -191,6 +229,10 @@ class JobRunner:
         ctx = JobContext(
             job_id=job_id, user_id=owner_id, work_dir=job_dir,
             log=log, check_cancelled=check_cancelled, progress=progress,
+            # Platform authority for this job's core budget. Static for
+            # now (host-aware per-job cap); a future scheduler can vary
+            # it per the live in-flight set.
+            cpu_budget=cores_per_job(),
         )
 
         # ---- dispatch the adapter ----

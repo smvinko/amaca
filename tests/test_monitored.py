@@ -67,6 +67,34 @@ def test_nonzero_exit_raises_with_tail(tmp_path: Path) -> None:
         run_monitored([sys.executable, "-c", script], ctx, poll_s=0.02)
 
 
+def _omp_script() -> str:
+    return "import os; print('OMP=' + os.environ.get('OMP_NUM_THREADS','unset'))"
+
+
+def test_budget_pins_thread_env_to_ctx_cpu_budget(tmp_path: Path) -> None:
+    """Every child's OpenMP/BLAS caps are pinned to ctx.cpu_budget —
+    the platform authority — regardless of the parent's environment."""
+    ctx, logs, _ = _ctx(tmp_path)
+    ctx.cpu_budget = 2
+    run_monitored([sys.executable, "-c", _omp_script()], ctx, poll_s=0.02)
+    assert "OMP=2" in logs
+    assert any("compute budget 2 core(s)" in line for line in logs)
+
+
+def test_cpu_request_can_only_lower_not_raise(tmp_path: Path) -> None:
+    """An adapter may request *fewer* cores than the budget; a request
+    above the budget is clamped down (never oversubscribes the host)."""
+    ctx, logs, _ = _ctx(tmp_path)
+    ctx.cpu_budget = 4
+    run_monitored([sys.executable, "-c", _omp_script()], ctx,
+                  cpu=1, poll_s=0.02)
+    assert "OMP=1" in logs                       # honoured (fewer)
+    logs.clear()
+    run_monitored([sys.executable, "-c", _omp_script()], ctx,
+                  cpu=99, poll_s=0.02)
+    assert "OMP=4" in logs                       # clamped to budget
+
+
 def test_cancellation_terminates_child(tmp_path: Path) -> None:
     cancel = threading.Event()
     ctx, _, _ = _ctx(tmp_path, cancel=cancel)

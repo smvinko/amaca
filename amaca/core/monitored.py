@@ -24,6 +24,7 @@ import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from .resources import cores_per_job, thread_env
 from .types import JobContext
 
 SENTINEL = "@amaca:progress"
@@ -35,6 +36,7 @@ def run_monitored(
     *,
     cwd: str | Path | None = None,
     env: Mapping[str, str] | None = None,
+    cpu: int | None = None,
     sentinel: str = SENTINEL,
     poll_s: float = 0.2,
     cancel_grace_s: float = 5.0,
@@ -49,11 +51,23 @@ def run_monitored(
       ``RuntimeError("cancelled")`` is raised (the runner maps that to
       a CANCELLED job).
     - A non-zero exit raises ``RuntimeError`` with the tail of output.
+
+    Compute budget: the child's OpenMP/BLAS thread caps are **always**
+    pinned by the platform — to ``ctx.cpu_budget``, or to ``cpu`` if
+    the adapter requests *fewer* (it can never request more). This is
+    the single chokepoint where amaca enforces per-job core limits, so
+    every out-of-process code is bounded without the adapter managing
+    environment itself. ``env`` (if given) supplies the rest of the
+    environment (PATH, venv, …); only the thread vars are overridden.
     """
+    budget = ctx.cpu_budget if ctx.cpu_budget and ctx.cpu_budget > 0 else cores_per_job()
+    n_cpu = budget if cpu is None else max(1, min(int(cpu), budget))
+    ctx.log(f"amaca: compute budget {n_cpu} core(s) (OMP_NUM_THREADS={n_cpu})")
+
     proc = subprocess.Popen(
         [str(a) for a in argv],
         cwd=str(cwd) if cwd is not None else None,
-        env=dict(env) if env is not None else None,
+        env=thread_env(n_cpu, base=env),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,

@@ -6,6 +6,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Callable
 
+from .resources import cores_per_job
+
 
 def _noop_progress(
     fraction: float,
@@ -56,6 +58,13 @@ class JobContext:
       out-of-process codes should instead emit the ``@amaca:progress``
       stdout sentinel and be launched via ``amaca.core.run_monitored``
       (see SPEC) — that bridges the sentinel to this callable.
+
+    ``cpu_budget`` is the number of CPU cores this job may use — the
+    platform's authority, set by the runner (host-aware, see
+    ``amaca.core.resources``). ``run_monitored`` enforces it on every
+    subprocess; an adapter may *request* fewer (``run_monitored(...,
+    cpu=...)``) but never more. Defaults to the platform per-job budget
+    so a directly-constructed context (tests/adapters) is still sane.
     """
     job_id: int
     user_id: int
@@ -63,3 +72,4 @@ class JobContext:
     log: Callable[[str], None]
     check_cancelled: Callable[[], bool]
     progress: Callable[..., None] = field(default=_noop_progress)
+    cpu_budget: int = field(default_factory=cores_per_job)

@@ -147,3 +147,59 @@ async def test_runner_double_submit_is_idempotent(
 
 async def test_runner_request_cancel_unknown_returns_false(runner: JobRunner) -> None:
     assert runner.request_cancel(9999) is False
+
+
+# --------------------------------------------------- concurrency cap
+
+async def test_runner_concurrency_cap_serialises(
+    SessionLocal, db: Session, user: models.User, tmp_path: Path
+) -> None:
+    """With max_concurrent=1, a second job stays QUEUED until the first
+    finishes (the cap serialises dispatch; resource policy is amaca's)."""
+    r = JobRunner(SessionLocal, tmp_path / "d", max_concurrent=1)
+    a = _make_job(db, user, DemoInputs(sleep_s=0.4).model_dump())
+    b = _make_job(db, user, DemoInputs(sleep_s=0.05).model_dump())
+    await r.submit(a.id)
+    await r.submit(b.id)
+
+    await asyncio.sleep(0.15)            # A running; B must still wait
+    db.refresh(a)
+    db.refresh(b)
+    assert a.status == JobStatus.RUNNING.value
+    assert b.status == JobStatus.QUEUED.value
+
+    await r.wait(a.id)
+    await r.wait(b.id)
+    db.refresh(a)
+    db.refresh(b)
+    assert a.status == b.status == JobStatus.SUCCEEDED.value
+    # B only started after A released its slot.
+    assert b.started_at is not None and a.finished_at is not None
+    assert b.started_at >= a.finished_at
+
+
+async def test_runner_cancel_while_queued_never_dispatches(
+    SessionLocal, db: Session, user: models.User, tmp_path: Path
+) -> None:
+    """A job cancelled while waiting for a slot finalises CANCELLED
+    without the adapter ever running (no started_at, no logs)."""
+    r = JobRunner(SessionLocal, tmp_path / "d", max_concurrent=1)
+    a = _make_job(db, user, DemoInputs(sleep_s=0.4).model_dump())
+    b = _make_job(db, user, DemoInputs(sleep_s=0.2).model_dump())
+    await r.submit(a.id)
+    await r.submit(b.id)
+
+    await asyncio.sleep(0.1)             # A running; B queued
+    assert r.request_cancel(b.id) is True
+
+    await r.wait(a.id)
+    await r.wait(b.id)
+    db.refresh(a)
+    db.refresh(b)
+    assert a.status == JobStatus.SUCCEEDED.value
+    assert b.status == JobStatus.CANCELLED.value
+    assert b.started_at is None         # adapter never dispatched
+    blogs = db.scalars(
+        select(models.JobLog).where(models.JobLog.job_id == b.id)
+    ).all()
+    assert blogs == []
