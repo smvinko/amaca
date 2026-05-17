@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import { api, type JobListItem } from '$lib/api';
   import JobStatus from '$lib/JobStatus.svelte';
 
@@ -41,7 +42,12 @@
   }
 </script>
 
-<h2>My jobs</h2>
+<div class="page-head">
+  <h2>My jobs</h2>
+  <button type="button" class="primary" onclick={() => goto('/codes/ccfly')}>
+    + New CCFLY run
+  </button>
+</div>
 <p><a href="/">← all codes</a></p>
 
 {#if error}
@@ -49,7 +55,9 @@
 {:else if jobs === null}
   <p class="muted">Loading…</p>
 {:else if jobs.length === 0}
-  <p class="muted">No jobs yet. Submit one from <a href="/">a code page</a>.</p>
+  <p class="muted">
+    No jobs yet — <a href="/codes/ccfly">start a CCFLY run</a>.
+  </p>
 {:else}
   <table>
     <thead>
@@ -88,6 +96,14 @@
 {/if}
 
 <style>
+  .page-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .page-head h2 { margin: 0; }
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
   th { font-weight: 500; color: var(--fg-muted); font-size: 0.85em; }
