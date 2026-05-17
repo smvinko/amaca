@@ -33,8 +33,10 @@
     return typeof v === 'number' ? v : Number(v);
   };
 
-  const fmt = (n: number): string =>
-    n === 0 ? '0' : Number(n.toPrecision(4)).toExponential().replace('e+', 'e');
+  // Peak-intensity label: 2 significant digits, exponential (e.g.
+  // 1.0e16) — kept terse since it's the sole y-axis tick.
+  const fmtPeak = (n: number): string =>
+    Number.isFinite(n) ? n.toExponential(1).replace('e+', 'e') : '–';
 
   // Recomputes whenever any referenced form value changes.
   const model = $derived.by(() => {
@@ -84,7 +86,7 @@
       return { px: sx(ts), label: String(Number((ts * FS).toPrecision(3))) };
     });
     // Y axis: just the peak intensity, no other ticks.
-    const yticks = [{ py: sy(ymax), label: fmt(ymax) }];
+    const yticks = [{ py: sy(ymax), label: fmtPeak(ymax) }];
     return {
       W, H, padL, padR, padT, padB, d, centerX, tmax, ymax,
       xticks, yticks,
