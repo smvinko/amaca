@@ -176,14 +176,21 @@
       const r = l.right ? right : left;
       if (!r) return null;
       const sy = syOf(r);
-      return {
-        d: l.ys
-          .map((y, i) => `${i === 0 ? 'M' : 'L'} ${sx(xs[i]).toFixed(2)} ${sy(y).toFixed(2)}`)
-          .join(' '),
-        color: l.color,
-        label: l.label,
-        right: l.right
-      };
+      // Skip non-finite samples (a code can emit NaN/Inf, e.g. an
+      // off-resonance spectrum) and start a fresh sub-path after a
+      // gap — one bad point must never invalidate the whole <path>.
+      let d = '';
+      let pen = false;
+      for (let i = 0; i < l.ys.length; i++) {
+        const X = sx(xs[i]);
+        const Y = sy(l.ys[i]);
+        if (!Number.isFinite(X) || !Number.isFinite(Y)) { pen = false; continue; }
+        d += `${pen ? 'L' : 'M'} ${X.toFixed(2)} ${Y.toFixed(2)} `;
+        pen = true;
+      }
+      d = d.trim();
+      if (!d) return null;
+      return { d, color: l.color, label: l.label, right: l.right };
     }).filter(Boolean) as { d: string; color: string; label: string; right: boolean }[];
 
     const xticks = niceTicks(xmin, xmax, 7).map((v) => ({ v, px: sx(v) }));
