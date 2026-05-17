@@ -6,11 +6,18 @@ framework handles auth, job lifecycle, validation, and result display.
 
 See [SPEC.md](SPEC.md) for the design.
 
-## Setup: amaca + CCFLY on a new machine
+## Setup: amaca + CCFLY (install & reinstall)
+
+**`./scripts/setup.sh` is the canonical path for both first install
+and every reinstall** — new machine, after a `git pull`, or after a
+CCFLY pin bump. It's idempotent: just re-run it. Don't hand-roll the
+install; the manual sequence in the appendix exists only for debugging
+or a bespoke layout, not as a parallel "supported" path.
+
+`./scripts/dev.sh --frontend` runs the stack.
 
 From nothing to a running stack with the CCFLY atomic-kinetics code
-plugged in. Two scripts do the work; the manual equivalent is in the
-appendix.
+plugged in:
 
 ### How the pieces fit
 
