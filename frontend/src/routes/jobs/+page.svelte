@@ -40,6 +40,30 @@
     if (!ts) return '—';
     return new Date(ts).toLocaleString();
   }
+
+  // Per-row run details, read from the submitted inputs (ccfly keys;
+  // any other code just shows "—").
+  function inp(job: JobListItem, key: string): string | null {
+    const v = job.inputs?.[key];
+    return v == null || v === '' ? null : String(v);
+  }
+  function spectrumOf(job: JobListItem): string | null {
+    const m = inp(job, 'spectrum_mode');
+    return m && m !== 'off' ? m : null;
+  }
+
+  // Whole-row navigation, except when the click/keypress lands on an
+  // interactive child (the delete/cancel button).
+  function openJob(ev: Event, job: JobListItem) {
+    if ((ev.target as HTMLElement).closest('button, a')) return;
+    goto(`/jobs/${job.id}`);
+  }
+  function rowKey(ev: KeyboardEvent, job: JobListItem) {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    if ((ev.target as HTMLElement).closest('button, a')) return;
+    ev.preventDefault();
+    goto(`/jobs/${job.id}`);
+  }
 </script>
 
 <div class="page-head">
@@ -62,22 +86,33 @@
   <table>
     <thead>
       <tr>
-        <th>ID</th>
         <th>Code</th>
-        <th>Status</th>
+        <th>Element</th>
+        <th>Mode</th>
+        <th>Spectrum</th>
         <th>Submitted</th>
-        <th>Finished</th>
+        <th class="col-status">Status</th>
+        <th>ID</th>
         <th></th>
       </tr>
     </thead>
     <tbody>
       {#each jobs as job}
-        <tr>
-          <td><a href="/jobs/{job.id}">#{job.id}</a></td>
+        <tr
+          class="job-row"
+          role="link"
+          tabindex="0"
+          aria-label="Open job {job.id}"
+          onclick={(e) => openJob(e, job)}
+          onkeydown={(e) => rowKey(e, job)}
+        >
           <td>{job.code_name}</td>
-          <td><JobStatus status={job.status} /></td>
+          <td>{inp(job, 'species') ?? '—'}</td>
+          <td>{inp(job, 'simulation_type') ?? '—'}</td>
+          <td>{#if spectrumOf(job)}{spectrumOf(job)}{:else}<span class="muted">—</span>{/if}</td>
           <td class="muted">{fmt(job.created_at)}</td>
-          <td class="muted">{fmt(job.finished_at)}</td>
+          <td class="col-status"><JobStatus dot status={job.status} /></td>
+          <td class="muted">#{job.id}</td>
           <td class="actions">
             <button
               type="button"
@@ -109,4 +144,8 @@
   th { font-weight: 500; color: var(--fg-muted); font-size: 0.85em; }
   .actions { text-align: right; }
   .actions button { font-size: 0.85em; padding: 0.2rem 0.6rem; }
+  tbody .job-row { cursor: pointer; }
+  tbody .job-row:hover { background: var(--bg-elev); }
+  tbody .job-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .col-status { text-align: center; }
 </style>

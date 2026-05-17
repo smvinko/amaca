@@ -140,6 +140,7 @@ export interface JobListItem {
   status: JobStatus;
   created_at: string;
   finished_at: string | null;
+  inputs: Record<string, unknown>;
 }
 
 export interface JobOut {

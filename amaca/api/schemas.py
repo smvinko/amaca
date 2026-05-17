@@ -80,12 +80,16 @@ class JobLogLine(BaseModel):
 
 
 class JobListItem(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     id: int
     code_name: str
     status: str
     created_at: datetime
     finished_at: datetime | None = None
+    # The submitted inputs, so the list can show a few per-row run
+    # details without an extra request. ORM column is ``inputs_json``.
+    inputs: dict[str, Any] = Field(default_factory=dict,
+                                   validation_alias="inputs_json")
 
 
 class UserPatch(BaseModel):

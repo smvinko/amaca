@@ -135,3 +135,12 @@ header.appbar nav { display: flex; gap: 1rem; align-items: center; }
 .status-succeeded { background: #1f5234; color: #b6eecb; }
 .status-failed    { background: #5a2424; color: #ffc1c1; }
 .status-cancelled { background: #4a3e1f; color: #ffe5a1; }
+/* Compact variant: a colour-coded circle (reuses the .status-<state>
+   background above). */
+.status-dot {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  vertical-align: middle;
+}
