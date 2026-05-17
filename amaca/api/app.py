@@ -17,10 +17,12 @@ from amaca.core import load_entry_points
 from amaca.db import Base, make_engine, make_sessionmaker
 from amaca.workers import JobRunner
 
-# Register the bundled Demo adapter (side-effectful import). Real adapters
-# live in their own packages and arrive via the `amaca.codes` entry-point
-# group — see `load_entry_points()` called from the lifespan below.
-import amaca.codes.demo  # noqa: F401
+# Codes are discovered solely via the `amaca.codes` entry-point group
+# (see `load_entry_points()` in the lifespan below) — e.g. amaca-ccfly.
+# The bundled Demo adapter is no longer auto-registered into the running
+# app; it remains in `amaca.codes.demo` purely as the framework's
+# self-contained test fixture / reference adapter (the test suite
+# imports it directly via conftest).
 
 from . import auth, codes, jobs, users
 
