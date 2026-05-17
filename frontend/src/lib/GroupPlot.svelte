@@ -63,14 +63,34 @@
       if (I > ymax) ymax = I;
     }
     if (ymax <= 0) ymax = peak;
-    const W = 640, H = 200, pad = 26;
-    const sx = (x: number) => pad + (x / (tmax || 1)) * (W - 2 * pad);
-    const sy = (y: number) => H - pad - (y / (ymax || 1)) * (H - 2 * pad);
+    // Asymmetric padding: room on the left for y tick labels + the
+    // rotated y-axis title, room at the bottom for x ticks + title.
+    const W = 640, H = 220;
+    const padL = 70, padR = 16, padT = 14, padB = 48;
+    const plotW = W - padL - padR;
+    const plotH = H - padT - padB;
+    const sx = (x: number) => padL + (x / (tmax || 1)) * plotW;
+    const sy = (y: number) => H - padB - (y / (ymax || 1)) * plotH;
     const d = xs
       .map((x, i) => `${i === 0 ? 'M' : 'L'} ${sx(x).toFixed(2)} ${sy(ys[i]).toFixed(2)}`)
       .join(' ');
     const centerX = t0 >= 0 && t0 <= tmax ? sx(t0) : null;
-    return { W, H, pad, d, centerX, tmax, ymax };
+    // Evenly spaced ticks; labels via the shared exponential fmt().
+    const NX = 4, NY = 4;
+    const xticks = Array.from({ length: NX + 1 }, (_, i) => {
+      const v = (i / NX) * tmax;
+      return { px: sx(v), label: fmt(v) };
+    });
+    const yticks = Array.from({ length: NY + 1 }, (_, j) => {
+      const v = (j / NY) * ymax;
+      return { py: sy(v), label: fmt(v) };
+    });
+    return {
+      W, H, padL, padR, padT, padB, d, centerX, tmax, ymax,
+      xticks, yticks,
+      axisX0: padL, axisX1: W - padR,
+      axisY0: H - padB, axisY1: padT
+    };
   });
 </script>
 
@@ -86,23 +106,60 @@
       role="img"
       aria-label={plot.title ?? 'preview plot'}
     >
-      <rect
-        x="0.5" y="0.5" width={model.W - 1} height={model.H - 1}
-        fill="none" stroke="var(--border)"
+      <!-- y grid + tick labels -->
+      {#each model.yticks as t}
+        <line
+          x1={model.axisX0} y1={t.py} x2={model.axisX1} y2={t.py}
+          stroke="var(--border)" stroke-opacity="0.4"
+        />
+        <text
+          x={model.axisX0 - 8} y={t.py + 3}
+          text-anchor="end" class="gp-tick"
+        >{t.label}</text>
+      {/each}
+      <!-- x ticks + tick labels -->
+      {#each model.xticks as t}
+        <line
+          x1={t.px} y1={model.axisY0} x2={t.px} y2={model.axisY0 + 4}
+          stroke="var(--fg-muted)"
+        />
+        <text
+          x={t.px} y={model.axisY0 + 16}
+          text-anchor="middle" class="gp-tick"
+        >{t.label}</text>
+      {/each}
+      <!-- axes -->
+      <line
+        x1={model.axisX0} y1={model.axisY1}
+        x2={model.axisX0} y2={model.axisY0}
+        stroke="var(--fg-muted)"
+      />
+      <line
+        x1={model.axisX0} y1={model.axisY0}
+        x2={model.axisX1} y2={model.axisY0}
+        stroke="var(--fg-muted)"
       />
       {#if model.centerX !== null}
         <line
-          x1={model.centerX} y1={model.pad}
-          x2={model.centerX} y2={model.H - model.pad}
+          x1={model.centerX} y1={model.axisY1}
+          x2={model.centerX} y2={model.axisY0}
           stroke="var(--border)" stroke-dasharray="3 3"
         />
       {/if}
       <path d={model.d} fill="none" stroke="var(--accent)" stroke-width="2" />
+      <!-- axis titles -->
+      <text
+        x={(model.axisX0 + model.axisX1) / 2} y={model.H - 6}
+        text-anchor="middle" class="gp-axis-title"
+      >{plot.x_label ?? 'x'}</text>
+      <text
+        x="14" y={(model.axisY1 + model.axisY0) / 2}
+        text-anchor="middle" class="gp-axis-title"
+        transform="rotate(-90 14 {(model.axisY1 + model.axisY0) / 2})"
+      >{plot.y_label ?? 'y'}</text>
     </svg>
     <p class="gp-cap muted">
-      {plot.x_label ?? 'x'} ∈ [0, {fmt(model.tmax)}] · peak {fmt(model.ymax)}{plot.y_label
-        ? ` ${plot.y_label}`
-        : ''}
+      peak {fmt(model.ymax)}{plot.y_label ? ` ${plot.y_label}` : ''}
     </p>
   {:else}
     <p class="muted gp-empty">Enter valid pulse parameters to preview the shape.</p>
@@ -116,6 +173,15 @@
     border: 1px solid var(--border);
     border-radius: 6px;
     padding: 0.6rem 0.7rem;
+  }
+  .gp-tick {
+    fill: var(--fg-muted);
+    font-size: 11px;
+    font-family: var(--font-mono);
+  }
+  .gp-axis-title {
+    fill: var(--fg-muted);
+    font-size: 12px;
   }
   .gp-title {
     margin: 0 0 0.4rem;
